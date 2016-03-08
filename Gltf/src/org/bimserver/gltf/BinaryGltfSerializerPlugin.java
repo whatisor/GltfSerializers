@@ -6,7 +6,6 @@ import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Set;
 
-import org.apache.commons.io.IOUtils;
 import org.bimserver.emf.Schema;
 import org.bimserver.models.store.ObjectDefinition;
 import org.bimserver.plugins.PluginConfiguration;
