@@ -7,7 +7,11 @@ import java.nio.ByteOrder;
 import java.nio.DoubleBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
+import org.bimserver.geometry.IfcColors;
 import org.bimserver.models.geometry.GeometryData;
 import org.bimserver.models.geometry.GeometryInfo;
 import org.bimserver.models.ifc2x3tc1.IfcProduct;
@@ -31,6 +35,7 @@ import com.google.common.io.LittleEndianDataOutputStream;
  */
 public class BinaryGltfSerializer extends EmfSerializer {
 
+	private static final String VERTEX_COLOR_MATERIAL = "VertexColorMaterial";
 	private static final int FLOAT_VEC_4 = 35666;
 	private static final int SHORT = 5122;
 	private static final int ARRAY_BUFFER = 34962;
@@ -54,16 +59,26 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	private ObjectNode scenesNode;
 	private ObjectNode gltfNode;
 	private ObjectNode nodes;
-	private byte[] fragmentShaderBytes;
-	private byte[] vertexShaderBytes;
+	
+	private byte[] vertexColorFragmentShaderBytes;
+	private byte[] vertexColorVertexShaderBytes;
+	private byte[] materialColorFragmentShaderBytes;
+	private byte[] materialColorVertexShaderBytes;
+	
 	float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
 	float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
 	private ArrayNode childrenNode;
 	private ArrayNode modelTranslation;
+	private ObjectNode materials;
+	private ObjectNode shaders;
+	
+	private final Set<String> createdMaterials = new HashSet<>();
 
-	public BinaryGltfSerializer(byte[] fragmentShaderBytes, byte[] vertexShaderBytes) {
-		this.fragmentShaderBytes = fragmentShaderBytes;
-		this.vertexShaderBytes = vertexShaderBytes;
+	public BinaryGltfSerializer(byte[] vertexColorFragmentShaderBytes, byte[] vertexColorVertexShaderBytes, byte[] materialColorFragmentShaderBytes, byte[] materialColorVertexShaderBytes) {
+		this.vertexColorFragmentShaderBytes = vertexColorFragmentShaderBytes;
+		this.vertexColorVertexShaderBytes = vertexColorVertexShaderBytes;
+		this.materialColorFragmentShaderBytes = materialColorFragmentShaderBytes;
+		this.materialColorVertexShaderBytes = materialColorVertexShaderBytes;
 	}
 
 	@Override
@@ -76,13 +91,19 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		scenesNode = objectMapper.createObjectNode();
 		accessors = objectMapper.createObjectNode();
 		nodes = objectMapper.createObjectNode();
-
+		materials = objectMapper.createObjectNode();
+		shaders = objectMapper.createObjectNode();
+		
 		gltfNode.set("meshes", meshes);
 		gltfNode.set("bufferViews", buffersViews);
 		gltfNode.set("scenes", scenesNode);
 		gltfNode.set("accessors", accessors);
 		gltfNode.set("nodes", nodes);
 		gltfNode.set("buffers", buffers);
+		gltfNode.set("materials", materials);
+		gltfNode.set("shaders", shaders);
+		
+		createVertexColorMaterial();
 
 		try {
 			LittleEndianDataOutputStream dataOutputStream = new LittleEndianDataOutputStream(outputStream);
@@ -133,7 +154,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
 			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (geometryInfo != null) {
+			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null) {
 				GeometryData data = geometryInfo.getData();
 				int nrIndicesBytes = data.getIndices().length / 2;
 				int byteLength = nrIndicesBytes + data.getVertices().length + data.getNormals().length;
@@ -150,7 +171,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 			}
 		}
 
-		body = ByteBuffer.allocate(totalBodyByteLength + vertexShaderBytes.length + fragmentShaderBytes.length);
+		body = ByteBuffer.allocate(totalBodyByteLength + materialColorFragmentShaderBytes.length + materialColorVertexShaderBytes.length + vertexColorFragmentShaderBytes.length + vertexColorVertexShaderBytes.length);
 		body.order(ByteOrder.LITTLE_ENDIAN);
 		
 		ByteBuffer newIndicesBuffer = ByteBuffer.allocate(totalIndicesByteLength);
@@ -172,12 +193,14 @@ public class BinaryGltfSerializer extends EmfSerializer {
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
 			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (geometryInfo != null) {
+			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null) {
 				updateExtends(geometryInfo);
 			}
 		}
 		
 		float[] offsets = getOffsets();
+		
+		System.out.println(Arrays.toString(offsets));
 		
 		modelTranslation.add(-offsets[0]);
 		modelTranslation.add(-offsets[1]);
@@ -185,7 +208,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
 			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (geometryInfo != null && geometryInfo.getData().getVertices().length > 0) {
+			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().length > 0) {
 				int startPositionIndices = newIndicesBuffer.position();
 				int startPositionVertices = newVerticesBuffer.position();
 				int startPositionNormals = newNormalsBuffer.position();
@@ -232,25 +255,28 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		body.put(newNormalsBuffer);
 		body.put(newColorsBuffer);
 
-		String fragmentShaderBufferViewName = createBufferView(fragmentShaderBytes.length, body.position());
-		body.put(fragmentShaderBytes);
+		String vertexColorFragmentShaderBufferViewName = createBufferView(vertexColorFragmentShaderBytes.length, body.position());
+		body.put(vertexColorFragmentShaderBytes);
 
-		String vertexShaderBufferViewName = createBufferView(vertexShaderBytes.length, body.position());
-		body.put(vertexShaderBytes);
+		String vertexColorVertexShaderBufferViewName = createBufferView(vertexColorVertexShaderBytes.length, body.position());
+		body.put(vertexColorVertexShaderBytes);
+
+		String materialColorFragmentShaderBufferViewName = createBufferView(materialColorFragmentShaderBytes.length, body.position());
+		body.put(materialColorFragmentShaderBytes);
 		
-		// rootNode.set("buffers", createBuffers());
-		// rootNode.set("accessors", createAccessors());
+		String materialColorVertexShaderBufferViewName = createBufferView(materialColorVertexShaderBytes.length, body.position());
+		body.put(materialColorVertexShaderBytes);
+		
 		gltfNode.set("animations", createAnimations());
 		gltfNode.set("asset", createAsset());
-		// rootNode.set("bufferViews", createBufferViews());
-		gltfNode.set("materials", createMaterials());
-		// rootNode.set("meshes", createMeshes());
 		gltfNode.set("programs", createPrograms());
 		gltfNode.put("scene", "defaultScene");
-		gltfNode.set("shaders", createShaders(fragmentShaderBufferViewName, vertexShaderBufferViewName));
 		gltfNode.set("skins", createSkins());
 		gltfNode.set("techniques", createTechniques());
 
+		createVertexColorShaders(vertexColorFragmentShaderBufferViewName, vertexColorVertexShaderBufferViewName);
+		createMaterialColorShaders(materialColorFragmentShaderBufferViewName, materialColorVertexShaderBufferViewName);
+		
 		addBuffer("binary_glTF", "arraybuffer", body.capacity());
 
 		ArrayNode extensions = objectMapper.createArrayNode();
@@ -466,8 +492,10 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		attributesNode.put("POSITION", vertexAccessor);
 		if (colorAccessor != null) {
 			attributesNode.put("COLOR", colorAccessor);
+			primitiveNode.put("material", VERTEX_COLOR_MATERIAL);
+		} else {
+			primitiveNode.put("material", createOrGetMaterial(ifcProduct.eClass().getName(), IfcColors.getDefaultColor(ifcProduct.eClass().getName())));
 		}
-		primitiveNode.put("material", "defaultMaterial");
 
 		primitiveNode.put("indices", indicesAccessor);
 		primitiveNode.put("mode", TRIANGLES);
@@ -494,15 +522,88 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		return objectMapper.createObjectNode();
 	}
 
-	private JsonNode createAccessors() {
-		// TODO
-		return objectMapper.createObjectNode();
+	private JsonNode createTechniques() {
+		ObjectNode techniques = objectMapper.createObjectNode();
+
+		techniques.set("vertexColorTechnique", createVertexColorTechnique());
+		techniques.set("materialColorTechnique", createMaterialColorTechnique());
+
+		return techniques;
 	}
 
-	private JsonNode createTechniques() {
-		ObjectNode defaultTechnique = objectMapper.createObjectNode();
+	private ObjectNode createMaterialColorTechnique() {
+		ObjectNode technique = objectMapper.createObjectNode();
 
-		ObjectNode techniques = objectMapper.createObjectNode();
+		ObjectNode attributes = objectMapper.createObjectNode();
+		ObjectNode parameters = objectMapper.createObjectNode();
+		ObjectNode states = objectMapper.createObjectNode();
+		ObjectNode uniforms = objectMapper.createObjectNode();
+
+		attributes.put("a_normal", "normal");
+		attributes.put("a_position", "position");
+
+		ObjectNode diffuse = objectMapper.createObjectNode();
+		diffuse.put("type", 35666);
+		parameters.set("diffuse", diffuse);
+
+		ObjectNode modelViewMatrix = objectMapper.createObjectNode();
+		modelViewMatrix.put("semantic", "MODELVIEW");
+		modelViewMatrix.put("type", 35676);
+		parameters.set("modelViewMatrix", modelViewMatrix);
+
+		ObjectNode normal = objectMapper.createObjectNode();
+		normal.put("semantic", "NORMAL");
+		normal.put("type", 35665);
+		parameters.set("normal", normal);
+
+		ObjectNode normalMatrix = objectMapper.createObjectNode();
+		normalMatrix.put("semantic", "MODELVIEWINVERSETRANSPOSE");
+		normalMatrix.put("type", 35675);
+		parameters.set("normalMatrix", normalMatrix);
+
+		ObjectNode position = objectMapper.createObjectNode();
+		position.put("semantic", "POSITION");
+		position.put("type", 35665);
+		parameters.set("position", position);
+
+		ObjectNode projectionMatrix = objectMapper.createObjectNode();
+		projectionMatrix.put("semantic", "PROJECTION");
+		projectionMatrix.put("type", 35676);
+		parameters.set("projectionMatrix", projectionMatrix);
+
+		ObjectNode shininess = objectMapper.createObjectNode();
+		shininess.put("type", 5126);
+		parameters.set("shininess", shininess);
+
+		ObjectNode specular = objectMapper.createObjectNode();
+		specular.put("type", 35666);
+		parameters.set("specular", specular);
+
+		technique.put("program", "materialColorProgram");
+
+		ArrayNode statesEnable = objectMapper.createArrayNode();
+		statesEnable.add(2929);
+		statesEnable.add(2884);
+		states.set("enable", statesEnable);
+
+		uniforms.put("u_diffuse", "diffuse");
+		uniforms.put("u_modelViewMatrix", "modelViewMatrix");
+		uniforms.put("u_normalMatrix", "normalMatrix");
+		uniforms.put("u_projectionMatrix", "projectionMatrix");
+		uniforms.put("u_shininess", "shininess");
+		uniforms.put("u_specular", "specular");
+
+		technique.set("attributes", attributes);
+		technique.set("parameters", parameters);
+		technique.set("states", states);
+		technique.set("uniforms", uniforms);
+		
+		return technique;
+	}
+
+	private ObjectNode createVertexColorTechnique() {
+		ObjectNode technique = objectMapper.createObjectNode();
+
 		ObjectNode attributes = objectMapper.createObjectNode();
 		ObjectNode parameters = objectMapper.createObjectNode();
 		ObjectNode states = objectMapper.createObjectNode();
@@ -511,10 +612,6 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		attributes.put("a_normal", "normal");
 		attributes.put("a_position", "position");
 		attributes.put("a_color", "color");
-
-//		ObjectNode diffuse = objectMapper.createObjectNode();
-//		diffuse.put("type", 35666);
-//		parameters.set("diffuse", diffuse);
 
 		ObjectNode modelViewMatrix = objectMapper.createObjectNode();
 		modelViewMatrix.put("semantic", "MODELVIEW");
@@ -546,36 +643,23 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		projectionMatrix.put("type", 35676);
 		parameters.set("projectionMatrix", projectionMatrix);
 
-//		ObjectNode shininess = objectMapper.createObjectNode();
-//		shininess.put("type", 5126);
-//		parameters.set("shininess", shininess);
-
-//		ObjectNode specular = objectMapper.createObjectNode();
-//		specular.put("type", 35666);
-//		parameters.set("specular", specular);
-
-		defaultTechnique.put("program", "defaultProgram");
+		technique.put("program", "vertexColorProgram");
 
 		ArrayNode statesEnable = objectMapper.createArrayNode();
 		statesEnable.add(2929);
 		statesEnable.add(2884);
 		states.set("enable", statesEnable);
 
-//		uniforms.put("u_diffuse", "diffuse");
 		uniforms.put("u_modelViewMatrix", "modelViewMatrix");
 		uniforms.put("u_normalMatrix", "normalMatrix");
 		uniforms.put("u_projectionMatrix", "projectionMatrix");
-//		uniforms.put("u_shininess", "shininess");
-//		uniforms.put("u_specular", "specular");
 
-		defaultTechnique.set("attributes", attributes);
-		defaultTechnique.set("parameters", parameters);
-		defaultTechnique.set("states", states);
-		defaultTechnique.set("uniforms", uniforms);
-
-		techniques.set("defaultTechnique", defaultTechnique);
-
-		return techniques;
+		technique.set("attributes", attributes);
+		technique.set("parameters", parameters);
+		technique.set("states", states);
+		technique.set("uniforms", uniforms);
+		
+		return technique;
 	}
 
 	private JsonNode createSkins() {
@@ -583,9 +667,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		return objectMapper.createObjectNode();
 	}
 
-	private JsonNode createShaders(String fragmentShaderBufferViewName, String vertexShaderBufferViewName) {
-		ObjectNode shaders = objectMapper.createObjectNode();
-
+	private void createVertexColorShaders(String fragmentShaderBufferViewName, String vertexShaderBufferViewName) {
 		ObjectNode fragmentShaderExtensions = objectMapper.createObjectNode();
 		ObjectNode fragmentShaderBinary = objectMapper.createObjectNode();
 		fragmentShaderExtensions.set("KHR_binary_glTF", fragmentShaderBinary);
@@ -606,50 +688,92 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		vertexShader.put("uri", "data:,");
 		vertexShader.set("extensions", vertexShaderExtensions);
 
-		shaders.set("fragmentShader", fragmentShader);
-		shaders.set("vertexShader", vertexShader);
-
-		return shaders;
+		shaders.set("vertexColorFragmentShader", fragmentShader);
+		shaders.set("vertexColorVertexShader", vertexShader);
 	}
 
-	private JsonNode createPrograms() {
+	private void createMaterialColorShaders(String fragmentShaderBufferViewName, String vertexShaderBufferViewName) {
+		ObjectNode fragmentShaderExtensions = objectMapper.createObjectNode();
+		ObjectNode fragmentShaderBinary = objectMapper.createObjectNode();
+		fragmentShaderExtensions.set("KHR_binary_glTF", fragmentShaderBinary);
+		fragmentShaderBinary.put("bufferView", fragmentShaderBufferViewName);
+
+		ObjectNode fragmentShader = objectMapper.createObjectNode();
+		fragmentShader.put("type", 35632);
+		fragmentShader.put("uri", "data:,");
+		fragmentShader.set("extensions", fragmentShaderExtensions);
+
+		ObjectNode vertexShaderExtensions = objectMapper.createObjectNode();
+		ObjectNode vertexShaderBinary = objectMapper.createObjectNode();
+		vertexShaderExtensions.set("KHR_binary_glTF", vertexShaderBinary);
+		vertexShaderBinary.put("bufferView", vertexShaderBufferViewName);
+
+		ObjectNode vertexShader = objectMapper.createObjectNode();
+		vertexShader.put("type", 35633);
+		vertexShader.put("uri", "data:,");
+		vertexShader.set("extensions", vertexShaderExtensions);
+
+		shaders.set("materialColorFragmentShader", fragmentShader);
+		shaders.set("materialColorVertexShader", vertexShader);
+	}
+	
+	private ObjectNode createPrograms() {
 		ObjectNode programs = objectMapper.createObjectNode();
 
-		ObjectNode defaultProgram = objectMapper.createObjectNode();
-		ArrayNode attributes = objectMapper.createArrayNode();
-		programs.set("defaultProgram", defaultProgram);
-
-		defaultProgram.set("attributes", attributes);
-		attributes.add("a_normal");
-		attributes.add("a_position");
-		attributes.add("a_color");
-
-		defaultProgram.put("fragmentShader", "fragmentShader");
-		defaultProgram.put("vertexShader", "vertexShader");
+		programs.set("vertexColorProgram", createVertexColorsPrograms());
+		programs.set("materialColorProgram", createMaterialColorsPrograms());
 
 		return programs;
 	}
 
-	private JsonNode createMeshes() {
-		// TODO
-		return objectMapper.createObjectNode();
+	private JsonNode createVertexColorsPrograms() {
+		ObjectNode program = objectMapper.createObjectNode();
+		ArrayNode attributes = objectMapper.createArrayNode();
+
+		program.set("attributes", attributes);
+		attributes.add("a_normal");
+		attributes.add("a_position");
+		attributes.add("a_color");
+
+		program.put("fragmentShader", "vertexColorFragmentShader");
+		program.put("vertexShader", "vertexColorVertexShader");
+		
+		return program;
 	}
 
-	private JsonNode createMaterials() {
-		ObjectNode materialsNode = objectMapper.createObjectNode();
+	private JsonNode createMaterialColorsPrograms() {
+		ObjectNode program = objectMapper.createObjectNode();
+		ArrayNode attributes = objectMapper.createArrayNode();
 
-		ObjectNode defaultMaterial = objectMapper.createObjectNode();
+		program.set("attributes", attributes);
+		attributes.add("a_normal");
+		attributes.add("a_position");
 
-		defaultMaterial.put("name", "default material");
-		defaultMaterial.put("technique", "defaultTechnique");
+		program.put("fragmentShader", "materialColorFragmentShader");
+		program.put("vertexShader", "materialColorVertexShader");
+
+		return program;
+	}
+	
+	private String createOrGetMaterial(String name, float[] colors) {
+		if (createdMaterials.contains(name)) {
+			return name;
+		}
+		ObjectNode material = objectMapper.createObjectNode();
+
+		material.put("name", name + "Material");
+		material.put("technique", "materialColorTechnique");
 
 		ObjectNode values = objectMapper.createObjectNode();
 
 		ArrayNode diffuse = objectMapper.createArrayNode();
-		diffuse.add(0.8000000119209291);
-		diffuse.add(0);
-		diffuse.add(0);
-		diffuse.add(1);
+		for (int i=0; i<4; i++) {
+			diffuse.add(colors[i]);
+		}
+//		diffuse.add(0.8000000119209291);
+//		diffuse.add(0);
+//		diffuse.add(0);
+//		diffuse.add(1);
 
 		ArrayNode specular = objectMapper.createArrayNode();
 		specular.add(0.20000000298023218);
@@ -660,11 +784,26 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		values.set("specular", specular);
 		values.put("shininess", 256);
 
+		material.set("values", values);
+
+		materials.set(name, material);
+		
+		createdMaterials.add(name);
+		
+		return name;
+	}
+
+	private void createVertexColorMaterial() {
+		ObjectNode defaultMaterial = objectMapper.createObjectNode();
+		
+		defaultMaterial.put("name", VERTEX_COLOR_MATERIAL);
+		defaultMaterial.put("technique", "vertexColorTechnique");
+		
+		ObjectNode values = objectMapper.createObjectNode();
+		
 		defaultMaterial.set("values", values);
-
-		materialsNode.set("defaultMaterial", defaultMaterial);
-
-		return materialsNode;
+		
+		materials.set(VERTEX_COLOR_MATERIAL, defaultMaterial);
 	}
 
 	private JsonNode createAsset() {

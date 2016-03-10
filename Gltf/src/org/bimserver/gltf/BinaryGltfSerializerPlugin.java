@@ -16,17 +16,23 @@ import org.bimserver.shared.exceptions.PluginException;
 
 public class BinaryGltfSerializerPlugin implements SerializerPlugin {
 
-	private byte[] fragmentShaderBytes;
-	private byte[] vertexShaderBytes;
+	private byte[] vertexColorFragmentShaderBytes;
+	private byte[] vertexColorVertexShaderBytes;
+	private byte[] materialColorFragmentShaderBytes;
+	private byte[] materialColorVertexShaderBytes;
 
 	@Override
 	public void init(PluginContext pluginContext) throws PluginException {
-		Path fragmentShaderPath = pluginContext.getRootPath().resolve("shaders/fragment.shader");
-		Path vertexShaderPath = pluginContext.getRootPath().resolve("shaders/vertex.shader");
+		Path vertexColorFragmentShaderPath = pluginContext.getRootPath().resolve("shaders/fragmentcolor.shader");
+		Path vertexColorVertexShaderPath = pluginContext.getRootPath().resolve("shaders/vertexcolor.shader");
+		Path materialColorFragmentShaderPath = pluginContext.getRootPath().resolve("shaders/fragmentmaterial.shader");
+		Path materialColorVertexShaderPath = pluginContext.getRootPath().resolve("shaders/vertexmaterial.shader");
 		
 		try {
-			fragmentShaderBytes = Files.readAllBytes(fragmentShaderPath);
-			vertexShaderBytes = Files.readAllBytes(vertexShaderPath);
+			vertexColorFragmentShaderBytes = Files.readAllBytes(vertexColorFragmentShaderPath);
+			vertexColorVertexShaderBytes = Files.readAllBytes(vertexColorVertexShaderPath);
+			materialColorFragmentShaderBytes = Files.readAllBytes(materialColorFragmentShaderPath);
+			materialColorVertexShaderBytes = Files.readAllBytes(materialColorVertexShaderPath);
 		} catch (IOException e) {
 			throw new PluginException(e);
 		}
@@ -39,7 +45,7 @@ public class BinaryGltfSerializerPlugin implements SerializerPlugin {
 
 	@Override
 	public Serializer createSerializer(PluginConfiguration plugin) {
-		return new BinaryGltfSerializer(fragmentShaderBytes, vertexShaderBytes);
+		return new BinaryGltfSerializer(vertexColorFragmentShaderBytes, vertexColorVertexShaderBytes, materialColorFragmentShaderBytes, materialColorVertexShaderBytes);
 	}
 
 	@Override
