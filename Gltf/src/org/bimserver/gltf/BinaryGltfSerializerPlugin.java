@@ -10,11 +10,11 @@ import org.bimserver.emf.Schema;
 import org.bimserver.models.store.ObjectDefinition;
 import org.bimserver.plugins.PluginConfiguration;
 import org.bimserver.plugins.PluginContext;
+import org.bimserver.plugins.serializers.AbstractSerializerPlugin;
 import org.bimserver.plugins.serializers.Serializer;
-import org.bimserver.plugins.serializers.SerializerPlugin;
 import org.bimserver.shared.exceptions.PluginException;
 
-public class BinaryGltfSerializerPlugin implements SerializerPlugin {
+public class BinaryGltfSerializerPlugin extends AbstractSerializerPlugin {
 
 	private byte[] vertexColorFragmentShaderBytes;
 	private byte[] vertexColorVertexShaderBytes;
@@ -39,11 +39,6 @@ public class BinaryGltfSerializerPlugin implements SerializerPlugin {
 	}
 
 	@Override
-	public ObjectDefinition getSettingsDefinition() {
-		return null;
-	}
-
-	@Override
 	public Serializer createSerializer(PluginConfiguration plugin) {
 		return new BinaryGltfSerializer(vertexColorFragmentShaderBytes, vertexColorVertexShaderBytes, materialColorFragmentShaderBytes, materialColorVertexShaderBytes);
 	}
@@ -56,5 +51,15 @@ public class BinaryGltfSerializerPlugin implements SerializerPlugin {
 	@Override
 	public boolean needsGeometry() {
 		return true;
+	}
+
+	@Override
+	public String getDefaultExtension() {
+		return "glb";
+	}
+
+	@Override
+	public String getDefaultContentType() {
+		return "model/gltf+binary";
 	}
 }
