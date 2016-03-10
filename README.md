@@ -6,9 +6,17 @@ This is mainly just a demo, but it might evolve into a useful glTF serializer wi
 
 > Note: This plugin only works with the (yet unreleased) version 1.5 of BIMserver
 
-Implemented:
+## Implemented:
 - https://github.com/KhronosGroup/glTF/blob/master/extensions/Khronos/KHR_binary_glTF/README.md
 - Using vertex-colors where available, otherwise it defaults to a set of predefined type-colors
+
+## Usage
+- Install this plugin
+- Download .glb files of your models with the "Binary glTF Serializer"
+
+## Using with CesiumJS
+- You can use a little bit of boilerplate code from the CesiumLoader project
+- https://github.com/opensourceBIM/CesiumLoader
 
 ## TODO
 
