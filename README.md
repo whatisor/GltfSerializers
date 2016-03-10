@@ -4,6 +4,8 @@ This is mainly just a demo, but it might evolve into a useful glTF serializer wi
 
 ##
 
+> Note: This plugin only works with the (yet unreleased) version 1.5 of BIMserver
+
 Implemented:
 - https://github.com/KhronosGroup/glTF/blob/master/extensions/Khronos/KHR_binary_glTF/README.md
 - Using vertex-colors where available, otherwise it defaults to a set of predefined type-colors
