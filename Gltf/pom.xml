@@ -14,6 +14,10 @@
 				<targetPath>plugin</targetPath>
 				<directory>plugin</directory>
 			</resource>
+			<resource>
+				<targetPath>shaders</targetPath>
+				<directory>shaders</directory>
+			</resource>
 		</resources>
 		<plugins>
 			<plugin>
@@ -157,7 +161,7 @@
 		<dependency>
 			<groupId>org.opensourcebim</groupId>
 			<artifactId>pluginbase</artifactId>
-			<version>1.5.44-SNAPSHOT</version>
+			<version>1.5.51</version>
 		</dependency>
 	</dependencies>
 	<distributionManagement>
