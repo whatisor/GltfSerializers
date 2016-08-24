@@ -7,7 +7,6 @@ import java.util.Collections;
 import java.util.Set;
 
 import org.bimserver.emf.Schema;
-import org.bimserver.models.store.ObjectDefinition;
 import org.bimserver.plugins.PluginConfiguration;
 import org.bimserver.plugins.PluginContext;
 import org.bimserver.plugins.serializers.AbstractSerializerPlugin;
