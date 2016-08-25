@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.bimserver.geometry.IfcColors;
+import org.bimserver.geometry.Matrix;
 import org.bimserver.models.geometry.GeometryData;
 import org.bimserver.models.geometry.GeometryInfo;
 import org.bimserver.models.ifc2x3tc1.IfcProduct;
@@ -67,12 +68,12 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	
 	float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
 	float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
-	private ArrayNode childrenNode;
 	private ArrayNode modelTranslation;
 	private ObjectNode materials;
 	private ObjectNode shaders;
 	
 	private final Set<String> createdMaterials = new HashSet<>();
+	private ArrayNode translationChildrenNode;
 
 	public BinaryGltfSerializer(byte[] vertexColorFragmentShaderBytes, byte[] vertexColorVertexShaderBytes, byte[] materialColorFragmentShaderBytes, byte[] materialColorVertexShaderBytes) {
 		this.vertexColorFragmentShaderBytes = vertexColorFragmentShaderBytes;
@@ -124,25 +125,29 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		return false;
 	}
 
-	private ObjectNode createModelNode() {
-		ObjectNode modelNode = objectMapper.createObjectNode();
-
-		childrenNode = objectMapper.createArrayNode();
-		modelNode.set("children", childrenNode);
+	private void createModelNode() {
+		ObjectNode translationNode = objectMapper.createObjectNode();
 		modelTranslation = objectMapper.createArrayNode();
-		modelNode.set("translation", modelTranslation);
+		
+		translationChildrenNode = objectMapper.createArrayNode();
+		translationNode.set("children", translationChildrenNode);
+		translationNode.set("translation", modelTranslation);
+		ObjectNode rotationNode = objectMapper.createObjectNode();
 		
 		ArrayNode rotation = objectMapper.createArrayNode();
-		modelNode.set("rotation", rotation);
+		ArrayNode rotationChildrenNode = objectMapper.createArrayNode();
+		rotationChildrenNode.add("translationNode");
+		rotationNode.set("children", rotationChildrenNode);
+		rotationNode.set("rotation", rotation);
+		
 		rotation.add(1f);
 		rotation.add(0f);
 		rotation.add(0f);
 		rotation.add(-1f);
 		
-		nodes.set("modelNode", modelNode);
-		defaultSceneNodes.add("modelNode");
-		
-		return modelNode;
+		nodes.set("rotationNode", rotationNode);
+		nodes.set("translationNode", translationNode);
+		defaultSceneNodes.add("rotationNode");
 	}
 
 	private void generateSceneAndBody() throws SerializerException {
@@ -165,12 +170,15 @@ public class BinaryGltfSerializer extends EmfSerializer {
 					int nrIndices = nrIndicesBytes / 4;
 					totalVerticesByteLength += nrIndices * 3 * 4;				
 					totalNormalsByteLength += nrIndices * 3 * 4;				
+					if (data.getMaterials() != null) {
+						totalColorsByteLength += nrIndices * 4 * 4;
+					}
 				} else {
 					totalVerticesByteLength += data.getVertices().length;				
 					totalNormalsByteLength += data.getNormals().length;				
-				}
-				if (data.getMaterials() != null) {
-					totalColorsByteLength += data.getMaterials().length;
+					if (data.getMaterials() != null) {
+						totalColorsByteLength += data.getMaterials().length;
+					}
 				}
 			}
 		}
@@ -187,7 +195,9 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		
 		ByteBuffer newNormalsBuffer = ByteBuffer.allocate(totalNormalsByteLength);
 		newNormalsBuffer.order(ByteOrder.LITTLE_ENDIAN);
+		
 		ByteBuffer newColorsBuffer = ByteBuffer.allocate(totalColorsByteLength);
+		newColorsBuffer.order(ByteOrder.LITTLE_ENDIAN);
 
 		String indicesBufferView = createBufferView(totalIndicesByteLength, 0, ELEMENT_ARRAY_BUFFER);
 		String verticesBufferView = createBufferView(totalVerticesByteLength, totalIndicesByteLength, ARRAY_BUFFER);
@@ -200,18 +210,25 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
 			GeometryInfo geometryInfo = ifcProduct.getGeometry();
 			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null) {
-				updateExtends(geometryInfo);
+				ByteBuffer matrixByteBuffer = ByteBuffer.wrap(ifcProduct.getGeometry().getTransformation());
+				matrixByteBuffer.order(ByteOrder.LITTLE_ENDIAN);
+				DoubleBuffer doubleBuffer = matrixByteBuffer.asDoubleBuffer();
+				float[] matrix = new float[16];
+				for (int i=0; i<doubleBuffer.capacity(); i++) {
+					matrix[i] = (float) doubleBuffer.get();
+				}
+
+				updateExtends(geometryInfo, matrix);
 			}
 		}
 		
 		float[] offsets = getOffsets();
 		
-		System.out.println(Arrays.toString(offsets));
-		
+		// This will "normalize" the model by moving it's axis-aligned bounding box center to the 0-point. This will always be the wrong position, but at least the building will be close to the 0-point
 		modelTranslation.add(-offsets[0]);
 		modelTranslation.add(-offsets[1]);
 		modelTranslation.add(-offsets[2]);
-		
+
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
 			GeometryInfo geometryInfo = ifcProduct.getGeometry();
 			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().length > 0) {
@@ -233,6 +250,13 @@ public class BinaryGltfSerializer extends EmfSerializer {
 				ByteBuffer normalsBuffer = ByteBuffer.wrap(data.getNormals());
 				normalsBuffer.order(ByteOrder.LITTLE_ENDIAN);
 				FloatBuffer normalsFloatBuffer = normalsBuffer.asFloatBuffer();
+
+				FloatBuffer materialsFloatBuffer = null;
+				if (data.getMaterials() != null) {
+					ByteBuffer materialsBuffer = ByteBuffer.wrap(data.getMaterials());
+					materialsBuffer.order(ByteOrder.LITTLE_ENDIAN);
+					materialsFloatBuffer = materialsBuffer.asFloatBuffer();
+				}
 				
 				if (data.getIndices().length > 4 * maxIndexValues) {
 					int totalNrIndices = indicesIntBuffer.capacity();
@@ -284,6 +308,26 @@ public class BinaryGltfSerializer extends EmfSerializer {
 							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex3 * 3 + 1));
 							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex3 * 3 + 2));
 						}
+						if (materialsFloatBuffer != null) {
+							for (int i=part * maxIndexValues; i<upto; i+=3) {
+								int oldIndex1 = indicesIntBuffer.get(i);
+								int oldIndex2 = indicesIntBuffer.get(i+1);
+								int oldIndex3 = indicesIntBuffer.get(i+2);
+								
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex1 * 4));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex1 * 4 + 1));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex1 * 4 + 2));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex1 * 4 + 3));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex2 * 4));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex2 * 4 + 1));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex2 * 4 + 2));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex2 * 4 + 3));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex3 * 4));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex3 * 4 + 1));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex3 * 4 + 2));
+								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex3 * 4 + 3));
+							}
+						}
 						
 						ObjectNode primitiveNode = objectMapper.createObjectNode();
 						
@@ -295,7 +339,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 							if (colorsBufferView == null) {
 								colorsBufferView = createBufferView(totalColorsByteLength, totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength, ARRAY_BUFFER);
 							}
-							colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors);
+							colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors, nrVertices * 4 / 3);
 						}
 						primitivesNode.add(primitiveNode);
 						
@@ -313,13 +357,9 @@ public class BinaryGltfSerializer extends EmfSerializer {
 						}
 					}
 					
-					if (data.getMaterials() != null) {
-						newColorsBuffer.put(data.getMaterials());
-					}
-					
 					String meshName = addMesh(ifcProduct, primitivesNode);
 					String nodeName = addNode(meshName, ifcProduct);
-					childrenNode.add(nodeName);
+					translationChildrenNode.add(nodeName);
 				} else {
 					for (int i=0; i<indicesIntBuffer.capacity(); i++) {
 						int index = indicesIntBuffer.get(i);
@@ -349,7 +389,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 						if (colorsBufferView == null) {
 							colorsBufferView = createBufferView(totalColorsByteLength, totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength, ARRAY_BUFFER);
 						}
-						colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors);
+						colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors, data.getVertices().length / 4);
 					}
 					primitivesNode.add(primitiveNode);
 					
@@ -368,7 +408,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 					
 					String meshName = addMesh(ifcProduct, primitivesNode);
 					String nodeName = addNode(meshName, ifcProduct);
-					childrenNode.add(nodeName);
+					translationChildrenNode.add(nodeName);
 				}
 			}
 		}
@@ -433,13 +473,16 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		return changes;
 	}
 	
-	private void updateExtends(GeometryInfo geometryInfo) {
+	private void updateExtends(GeometryInfo geometryInfo, float[] matrix) {
 		ByteBuffer verticesByteBufferBuffer = ByteBuffer.wrap(geometryInfo.getData().getVertices());
 		verticesByteBufferBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		FloatBuffer floatBuffer = verticesByteBufferBuffer.asFloatBuffer();
 		for (int i=0; i<floatBuffer.capacity(); i+=3) {
+			float[] input = new float[]{floatBuffer.get(i), floatBuffer.get(i + 1), floatBuffer.get(i + 2), 1};
+			float[] output = new float[4];
+			Matrix.multiplyMV(output, 0, matrix, 0, input, 0);
 			for (int j=0; j<3; j++) {
-				float value = floatBuffer.get(i + j);
+				float value = output[j];
 				if (value > max[j]) {
 					max[j] = value;
 				}
@@ -533,7 +576,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		return accessorName;
 	}
 
-	private String addColorsAccessor(IfcProduct ifcProduct, String bufferViewName, int byteOffset) {
+	private String addColorsAccessor(IfcProduct ifcProduct, String bufferViewName, int byteOffset, int count) {
 		String accessorName = "accessor_color_" + (accessorCounter++);
 		
 		ObjectNode accessor = objectMapper.createObjectNode();
@@ -541,7 +584,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		accessor.put("byteOffset", byteOffset);
 		accessor.put("byteStride", 16);
 		accessor.put("componentType", FLOAT);
-		accessor.put("count", ifcProduct.getGeometry().getData().getMaterials() == null ? 0 : ifcProduct.getGeometry().getData().getMaterials().length / 4);
+		accessor.put("count", count);
 		accessor.put("type", "VEC4");
 		
 //		ArrayNode min = objectMapper.createArrayNode();
