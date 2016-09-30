@@ -61,4 +61,9 @@ public class BinaryGltfSerializerPlugin extends AbstractSerializerPlugin {
 	public String getDefaultContentType() {
 		return "model/gltf+binary";
 	}
+
+	@Override
+	public String getOutputFormat(Schema schema) {
+		return "GLTF_BIN_1.0";
+	}
 }
