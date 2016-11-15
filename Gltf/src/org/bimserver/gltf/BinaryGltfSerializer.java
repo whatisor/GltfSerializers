@@ -48,7 +48,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	private int JSON_SCENE_FORMAT = 0;
 	private int FORMAT_VERSION_1 = 1;
 
-	private final ObjectMapper objectMapper = new ObjectMapper();
+	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 	private ObjectNode buffers;
 	private ByteBuffer body;
 	private ObjectNode meshes;
@@ -84,16 +84,16 @@ public class BinaryGltfSerializer extends EmfSerializer {
 
 	@Override
 	protected boolean write(OutputStream outputStream, ProgressReporter progressReporter) throws SerializerException {
-		gltfNode = objectMapper.createObjectNode();
+		gltfNode = OBJECT_MAPPER.createObjectNode();
 
-		buffers = objectMapper.createObjectNode();
-		meshes = objectMapper.createObjectNode();
-		buffersViews = objectMapper.createObjectNode();
-		scenesNode = objectMapper.createObjectNode();
-		accessors = objectMapper.createObjectNode();
-		nodes = objectMapper.createObjectNode();
-		materials = objectMapper.createObjectNode();
-		shaders = objectMapper.createObjectNode();
+		buffers = OBJECT_MAPPER.createObjectNode();
+		meshes = OBJECT_MAPPER.createObjectNode();
+		buffersViews = OBJECT_MAPPER.createObjectNode();
+		scenesNode = OBJECT_MAPPER.createObjectNode();
+		accessors = OBJECT_MAPPER.createObjectNode();
+		nodes = OBJECT_MAPPER.createObjectNode();
+		materials = OBJECT_MAPPER.createObjectNode();
+		shaders = OBJECT_MAPPER.createObjectNode();
 		
 		gltfNode.set("meshes", meshes);
 		gltfNode.set("bufferViews", buffersViews);
@@ -112,7 +112,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 			generateSceneAndBody();
 
 //			StringWriter stringWriter = new StringWriter();
-//			objectMapper.writerWithDefaultPrettyPrinter().writeValue(stringWriter, gltfNode);
+//			OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValue(stringWriter, gltfNode);
 //			System.out.println(stringWriter);
 
 			byte[] sceneBytes = gltfNode.toString().getBytes(Charsets.UTF_8);
@@ -126,16 +126,16 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private void createModelNode() {
-		ObjectNode translationNode = objectMapper.createObjectNode();
-		modelTranslation = objectMapper.createArrayNode();
+		ObjectNode translationNode = OBJECT_MAPPER.createObjectNode();
+		modelTranslation = OBJECT_MAPPER.createArrayNode();
 		
-		translationChildrenNode = objectMapper.createArrayNode();
+		translationChildrenNode = OBJECT_MAPPER.createArrayNode();
 		translationNode.set("children", translationChildrenNode);
 		translationNode.set("translation", modelTranslation);
-		ObjectNode rotationNode = objectMapper.createObjectNode();
+		ObjectNode rotationNode = OBJECT_MAPPER.createObjectNode();
 		
-		ArrayNode rotation = objectMapper.createArrayNode();
-		ArrayNode rotationChildrenNode = objectMapper.createArrayNode();
+		ArrayNode rotation = OBJECT_MAPPER.createArrayNode();
+		ArrayNode rotationChildrenNode = OBJECT_MAPPER.createArrayNode();
 		rotationChildrenNode.add("translationNode");
 		rotationNode.set("children", rotationChildrenNode);
 		rotationNode.set("rotation", rotation);
@@ -262,7 +262,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 					int totalNrIndices = indicesIntBuffer.capacity();
 					int nrParts = (totalNrIndices + maxIndexValues - 1) / maxIndexValues;
 					
-					ArrayNode primitivesNode = objectMapper.createArrayNode();
+					ArrayNode primitivesNode = OBJECT_MAPPER.createArrayNode();
 					
 					for (int part=0; part<nrParts; part++) {
 						startPositionIndices = newIndicesBuffer.position();
@@ -329,7 +329,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 							}
 						}
 						
-						ObjectNode primitiveNode = objectMapper.createObjectNode();
+						ObjectNode primitiveNode = OBJECT_MAPPER.createObjectNode();
 						
 						String indicesAccessor = addIndicesAccessor(ifcProduct, indicesBufferView, startPositionIndices, nrVertices / 3);
 						String verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, nrVertices);
@@ -345,7 +345,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 						
 						primitiveNode.put("indices", indicesAccessor);
 						primitiveNode.put("mode", TRIANGLES);
-						ObjectNode attributesNode = objectMapper.createObjectNode();
+						ObjectNode attributesNode = OBJECT_MAPPER.createObjectNode();
 						primitiveNode.set("attributes", attributesNode);
 						attributesNode.put("NORMAL", normalsAccessor);
 						attributesNode.put("POSITION", verticesAccessor);
@@ -377,9 +377,9 @@ public class BinaryGltfSerializer extends EmfSerializer {
 					
 					int totalNrIndices = indicesIntBuffer.capacity();
 					
-					ArrayNode primitivesNode = objectMapper.createArrayNode();
+					ArrayNode primitivesNode = OBJECT_MAPPER.createArrayNode();
 					
-					ObjectNode primitiveNode = objectMapper.createObjectNode();
+					ObjectNode primitiveNode = OBJECT_MAPPER.createObjectNode();
 					
 					String indicesAccessor = addIndicesAccessor(ifcProduct, indicesBufferView, startPositionIndices, totalNrIndices);
 					String verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, data.getVertices().length / 4);
@@ -395,7 +395,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 					
 					primitiveNode.put("indices", indicesAccessor);
 					primitiveNode.put("mode", TRIANGLES);
-					ObjectNode attributesNode = objectMapper.createObjectNode();
+					ObjectNode attributesNode = OBJECT_MAPPER.createObjectNode();
 					primitiveNode.set("attributes", attributesNode);
 					attributesNode.put("NORMAL", normalsAccessor);
 					attributesNode.put("POSITION", verticesAccessor);
@@ -460,7 +460,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		
 		addBuffer("binary_glTF", "arraybuffer", body.capacity());
 
-		ArrayNode extensions = objectMapper.createArrayNode();
+		ArrayNode extensions = OBJECT_MAPPER.createArrayNode();
 		extensions.add("KHR_binary_glTF");
 		gltfNode.set("extensionsUsed", extensions);
 	}
@@ -495,9 +495,9 @@ public class BinaryGltfSerializer extends EmfSerializer {
 
 	private String addNode(String meshName, IfcProduct ifcProduct) {
 		String nodeName = "node_" + ifcProduct.getOid();
-		ObjectNode nodeNode = objectMapper.createObjectNode();
+		ObjectNode nodeNode = OBJECT_MAPPER.createObjectNode();
 
-		ArrayNode matrixArray = objectMapper.createArrayNode();
+		ArrayNode matrixArray = OBJECT_MAPPER.createArrayNode();
 		ByteBuffer matrixByteBuffer = ByteBuffer.wrap(ifcProduct.getGeometry().getTransformation());
 		matrixByteBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		DoubleBuffer doubleBuffer = matrixByteBuffer.asDoubleBuffer();
@@ -505,7 +505,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 			matrixArray.add(doubleBuffer.get(i));
 		}
 
-		ArrayNode meshes = objectMapper.createArrayNode();
+		ArrayNode meshes = OBJECT_MAPPER.createArrayNode();
 		meshes.add(meshName);
 
 		nodeNode.set("meshes", meshes);
@@ -516,9 +516,9 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private ObjectNode createDefaultScene() {
-		ObjectNode sceneNode = objectMapper.createObjectNode();
+		ObjectNode sceneNode = OBJECT_MAPPER.createObjectNode();
 
-		defaultSceneNodes = objectMapper.createArrayNode();
+		defaultSceneNodes = OBJECT_MAPPER.createArrayNode();
 
 		sceneNode.set("nodes", defaultSceneNodes);
 
@@ -531,7 +531,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	
 	private String createBufferView(int byteLength, int byteOffset, int target) {
 		String name = "bufferView_" + (bufferViewCounter++);
-		ObjectNode bufferViewNode = objectMapper.createObjectNode();
+		ObjectNode bufferViewNode = OBJECT_MAPPER.createObjectNode();
 
 		bufferViewNode.put("buffer", "binary_glTF");
 		bufferViewNode.put("byteLength", byteLength);
@@ -551,7 +551,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		}
 		String accessorName = "accessor_normal_" + (accessorCounter++);
 
-		ObjectNode accessor = objectMapper.createObjectNode();
+		ObjectNode accessor = OBJECT_MAPPER.createObjectNode();
 		accessor.put("bufferView", bufferViewName);
 		accessor.put("byteOffset", byteOffset);
 		accessor.put("byteStride", 12);
@@ -559,11 +559,11 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		accessor.put("count", count);
 		accessor.put("type", "VEC3");
 
-		ArrayNode min = objectMapper.createArrayNode();
+		ArrayNode min = OBJECT_MAPPER.createArrayNode();
 		min.add(-1d);
 		min.add(-1d);
 		min.add(-1d);
-		ArrayNode max = objectMapper.createArrayNode();
+		ArrayNode max = OBJECT_MAPPER.createArrayNode();
 		max.add(1);
 		max.add(1);
 		max.add(1);
@@ -579,7 +579,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	private String addColorsAccessor(IfcProduct ifcProduct, String bufferViewName, int byteOffset, int count) {
 		String accessorName = "accessor_color_" + (accessorCounter++);
 		
-		ObjectNode accessor = objectMapper.createObjectNode();
+		ObjectNode accessor = OBJECT_MAPPER.createObjectNode();
 		accessor.put("bufferView", bufferViewName);
 		accessor.put("byteOffset", byteOffset);
 		accessor.put("byteStride", 16);
@@ -587,11 +587,11 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		accessor.put("count", count);
 		accessor.put("type", "VEC4");
 		
-//		ArrayNode min = objectMapper.createArrayNode();
+//		ArrayNode min = OBJECT_MAPPER.createArrayNode();
 //		min.add(-1d);
 //		min.add(-1d);
 //		min.add(-1d);
-//		ArrayNode max = objectMapper.createArrayNode();
+//		ArrayNode max = OBJECT_MAPPER.createArrayNode();
 //		max.add(1);
 //		max.add(1);
 //		max.add(1);
@@ -613,7 +613,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		GeometryData data = ifcProduct.getGeometry().getData();
 		ByteBuffer verticesBuffer = ByteBuffer.wrap(data.getVertices());
 
-		ObjectNode accessor = objectMapper.createObjectNode();
+		ObjectNode accessor = OBJECT_MAPPER.createObjectNode();
 		accessor.put("bufferView", bufferViewName);
 		accessor.put("byteOffset", startPosition);
 		accessor.put("byteStride", 12);
@@ -636,11 +636,11 @@ public class BinaryGltfSerializer extends EmfSerializer {
 			}
 		}
 
-		ArrayNode minNode = objectMapper.createArrayNode();
+		ArrayNode minNode = OBJECT_MAPPER.createArrayNode();
 		minNode.add(min[0]);
 		minNode.add(min[1]);
 		minNode.add(min[2]);
-		ArrayNode maxNode = objectMapper.createArrayNode();
+		ArrayNode maxNode = OBJECT_MAPPER.createArrayNode();
 		maxNode.add(max[0]);
 		maxNode.add(max[1]);
 		maxNode.add(max[2]);
@@ -659,7 +659,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		}
 		String accessorName = "accessor_index_" + (accessorCounter++);
 
-		ObjectNode accessor = objectMapper.createObjectNode();
+		ObjectNode accessor = OBJECT_MAPPER.createObjectNode();
 		accessor.put("bufferView", bufferViewName);
 		accessor.put("byteOffset", offsetBytes);
 		accessor.put("byteStride", 0);
@@ -673,7 +673,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private String addMesh(IfcProduct ifcProduct, ArrayNode primitivesNode) {
-		ObjectNode meshNode = objectMapper.createObjectNode();
+		ObjectNode meshNode = OBJECT_MAPPER.createObjectNode();
 		String meshName = "mesh_" + ifcProduct.getOid();
 		meshNode.put("name", meshName);
 		meshNode.set("primitives", primitivesNode);
@@ -682,7 +682,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private void addBuffer(String name, String type, int byteLength) {
-		ObjectNode bufferNode = objectMapper.createObjectNode();
+		ObjectNode bufferNode = OBJECT_MAPPER.createObjectNode();
 
 		bufferNode.put("byteLength", byteLength);
 		bufferNode.put("type", type);
@@ -693,11 +693,11 @@ public class BinaryGltfSerializer extends EmfSerializer {
 
 	private JsonNode createAnimations() {
 		// TODO
-		return objectMapper.createObjectNode();
+		return OBJECT_MAPPER.createObjectNode();
 	}
 
 	private JsonNode createTechniques() {
-		ObjectNode techniques = objectMapper.createObjectNode();
+		ObjectNode techniques = OBJECT_MAPPER.createObjectNode();
 
 		techniques.set("vertexColorTechnique", createVertexColorTechnique());
 		techniques.set("materialColorTechnique", createMaterialColorTechnique());
@@ -706,56 +706,56 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private ObjectNode createMaterialColorTechnique() {
-		ObjectNode technique = objectMapper.createObjectNode();
+		ObjectNode technique = OBJECT_MAPPER.createObjectNode();
 
-		ObjectNode attributes = objectMapper.createObjectNode();
-		ObjectNode parameters = objectMapper.createObjectNode();
-		ObjectNode states = objectMapper.createObjectNode();
-		ObjectNode uniforms = objectMapper.createObjectNode();
+		ObjectNode attributes = OBJECT_MAPPER.createObjectNode();
+		ObjectNode parameters = OBJECT_MAPPER.createObjectNode();
+		ObjectNode states = OBJECT_MAPPER.createObjectNode();
+		ObjectNode uniforms = OBJECT_MAPPER.createObjectNode();
 
 		attributes.put("a_normal", "normal");
 		attributes.put("a_position", "position");
 
-		ObjectNode diffuse = objectMapper.createObjectNode();
+		ObjectNode diffuse = OBJECT_MAPPER.createObjectNode();
 		diffuse.put("type", 35666);
 		parameters.set("diffuse", diffuse);
 
-		ObjectNode modelViewMatrix = objectMapper.createObjectNode();
+		ObjectNode modelViewMatrix = OBJECT_MAPPER.createObjectNode();
 		modelViewMatrix.put("semantic", "MODELVIEW");
 		modelViewMatrix.put("type", 35676);
 		parameters.set("modelViewMatrix", modelViewMatrix);
 
-		ObjectNode normal = objectMapper.createObjectNode();
+		ObjectNode normal = OBJECT_MAPPER.createObjectNode();
 		normal.put("semantic", "NORMAL");
 		normal.put("type", 35665);
 		parameters.set("normal", normal);
 
-		ObjectNode normalMatrix = objectMapper.createObjectNode();
+		ObjectNode normalMatrix = OBJECT_MAPPER.createObjectNode();
 		normalMatrix.put("semantic", "MODELVIEWINVERSETRANSPOSE");
 		normalMatrix.put("type", 35675);
 		parameters.set("normalMatrix", normalMatrix);
 
-		ObjectNode position = objectMapper.createObjectNode();
+		ObjectNode position = OBJECT_MAPPER.createObjectNode();
 		position.put("semantic", "POSITION");
 		position.put("type", 35665);
 		parameters.set("position", position);
 
-		ObjectNode projectionMatrix = objectMapper.createObjectNode();
+		ObjectNode projectionMatrix = OBJECT_MAPPER.createObjectNode();
 		projectionMatrix.put("semantic", "PROJECTION");
 		projectionMatrix.put("type", 35676);
 		parameters.set("projectionMatrix", projectionMatrix);
 
-		ObjectNode shininess = objectMapper.createObjectNode();
+		ObjectNode shininess = OBJECT_MAPPER.createObjectNode();
 		shininess.put("type", 5126);
 		parameters.set("shininess", shininess);
 
-		ObjectNode specular = objectMapper.createObjectNode();
+		ObjectNode specular = OBJECT_MAPPER.createObjectNode();
 		specular.put("type", 35666);
 		parameters.set("specular", specular);
 
 		technique.put("program", "materialColorProgram");
 
-		ArrayNode statesEnable = objectMapper.createArrayNode();
+		ArrayNode statesEnable = OBJECT_MAPPER.createArrayNode();
 		statesEnable.add(2929);
 		statesEnable.add(2884);
 		states.set("enable", statesEnable);
@@ -776,50 +776,50 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private ObjectNode createVertexColorTechnique() {
-		ObjectNode technique = objectMapper.createObjectNode();
+		ObjectNode technique = OBJECT_MAPPER.createObjectNode();
 
-		ObjectNode attributes = objectMapper.createObjectNode();
-		ObjectNode parameters = objectMapper.createObjectNode();
-		ObjectNode states = objectMapper.createObjectNode();
-		ObjectNode uniforms = objectMapper.createObjectNode();
+		ObjectNode attributes = OBJECT_MAPPER.createObjectNode();
+		ObjectNode parameters = OBJECT_MAPPER.createObjectNode();
+		ObjectNode states = OBJECT_MAPPER.createObjectNode();
+		ObjectNode uniforms = OBJECT_MAPPER.createObjectNode();
 
 		attributes.put("a_normal", "normal");
 		attributes.put("a_position", "position");
 		attributes.put("a_color", "color");
 
-		ObjectNode modelViewMatrix = objectMapper.createObjectNode();
+		ObjectNode modelViewMatrix = OBJECT_MAPPER.createObjectNode();
 		modelViewMatrix.put("semantic", "MODELVIEW");
 		modelViewMatrix.put("type", 35676);
 		parameters.set("modelViewMatrix", modelViewMatrix);
 
-		ObjectNode normal = objectMapper.createObjectNode();
+		ObjectNode normal = OBJECT_MAPPER.createObjectNode();
 		normal.put("semantic", "NORMAL");
 		normal.put("type", 35665);
 		parameters.set("normal", normal);
 
-		ObjectNode normalMatrix = objectMapper.createObjectNode();
+		ObjectNode normalMatrix = OBJECT_MAPPER.createObjectNode();
 		normalMatrix.put("semantic", "MODELVIEWINVERSETRANSPOSE");
 		normalMatrix.put("type", 35675);
 		parameters.set("normalMatrix", normalMatrix);
 
-		ObjectNode position = objectMapper.createObjectNode();
+		ObjectNode position = OBJECT_MAPPER.createObjectNode();
 		position.put("semantic", "POSITION");
 		position.put("type", 35665);
 		parameters.set("position", position);
 
-		ObjectNode color = objectMapper.createObjectNode();
+		ObjectNode color = OBJECT_MAPPER.createObjectNode();
 		color.put("semantic", "COLOR");
 		color.put("type", FLOAT_VEC_4);
 		parameters.set("color", color);
 
-		ObjectNode projectionMatrix = objectMapper.createObjectNode();
+		ObjectNode projectionMatrix = OBJECT_MAPPER.createObjectNode();
 		projectionMatrix.put("semantic", "PROJECTION");
 		projectionMatrix.put("type", 35676);
 		parameters.set("projectionMatrix", projectionMatrix);
 
 		technique.put("program", "vertexColorProgram");
 
-		ArrayNode statesEnable = objectMapper.createArrayNode();
+		ArrayNode statesEnable = OBJECT_MAPPER.createArrayNode();
 		statesEnable.add(2929);
 		statesEnable.add(2884);
 		states.set("enable", statesEnable);
@@ -838,26 +838,26 @@ public class BinaryGltfSerializer extends EmfSerializer {
 
 	private JsonNode createSkins() {
 		// TODO
-		return objectMapper.createObjectNode();
+		return OBJECT_MAPPER.createObjectNode();
 	}
 
 	private void createVertexColorShaders(String fragmentShaderBufferViewName, String vertexShaderBufferViewName) {
-		ObjectNode fragmentShaderExtensions = objectMapper.createObjectNode();
-		ObjectNode fragmentShaderBinary = objectMapper.createObjectNode();
+		ObjectNode fragmentShaderExtensions = OBJECT_MAPPER.createObjectNode();
+		ObjectNode fragmentShaderBinary = OBJECT_MAPPER.createObjectNode();
 		fragmentShaderExtensions.set("KHR_binary_glTF", fragmentShaderBinary);
 		fragmentShaderBinary.put("bufferView", fragmentShaderBufferViewName);
 
-		ObjectNode fragmentShader = objectMapper.createObjectNode();
+		ObjectNode fragmentShader = OBJECT_MAPPER.createObjectNode();
 		fragmentShader.put("type", 35632);
 		fragmentShader.put("uri", "data:,");
 		fragmentShader.set("extensions", fragmentShaderExtensions);
 
-		ObjectNode vertexShaderExtensions = objectMapper.createObjectNode();
-		ObjectNode vertexShaderBinary = objectMapper.createObjectNode();
+		ObjectNode vertexShaderExtensions = OBJECT_MAPPER.createObjectNode();
+		ObjectNode vertexShaderBinary = OBJECT_MAPPER.createObjectNode();
 		vertexShaderExtensions.set("KHR_binary_glTF", vertexShaderBinary);
 		vertexShaderBinary.put("bufferView", vertexShaderBufferViewName);
 
-		ObjectNode vertexShader = objectMapper.createObjectNode();
+		ObjectNode vertexShader = OBJECT_MAPPER.createObjectNode();
 		vertexShader.put("type", 35633);
 		vertexShader.put("uri", "data:,");
 		vertexShader.set("extensions", vertexShaderExtensions);
@@ -867,22 +867,22 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private void createMaterialColorShaders(String fragmentShaderBufferViewName, String vertexShaderBufferViewName) {
-		ObjectNode fragmentShaderExtensions = objectMapper.createObjectNode();
-		ObjectNode fragmentShaderBinary = objectMapper.createObjectNode();
+		ObjectNode fragmentShaderExtensions = OBJECT_MAPPER.createObjectNode();
+		ObjectNode fragmentShaderBinary = OBJECT_MAPPER.createObjectNode();
 		fragmentShaderExtensions.set("KHR_binary_glTF", fragmentShaderBinary);
 		fragmentShaderBinary.put("bufferView", fragmentShaderBufferViewName);
 
-		ObjectNode fragmentShader = objectMapper.createObjectNode();
+		ObjectNode fragmentShader = OBJECT_MAPPER.createObjectNode();
 		fragmentShader.put("type", 35632);
 		fragmentShader.put("uri", "data:,");
 		fragmentShader.set("extensions", fragmentShaderExtensions);
 
-		ObjectNode vertexShaderExtensions = objectMapper.createObjectNode();
-		ObjectNode vertexShaderBinary = objectMapper.createObjectNode();
+		ObjectNode vertexShaderExtensions = OBJECT_MAPPER.createObjectNode();
+		ObjectNode vertexShaderBinary = OBJECT_MAPPER.createObjectNode();
 		vertexShaderExtensions.set("KHR_binary_glTF", vertexShaderBinary);
 		vertexShaderBinary.put("bufferView", vertexShaderBufferViewName);
 
-		ObjectNode vertexShader = objectMapper.createObjectNode();
+		ObjectNode vertexShader = OBJECT_MAPPER.createObjectNode();
 		vertexShader.put("type", 35633);
 		vertexShader.put("uri", "data:,");
 		vertexShader.set("extensions", vertexShaderExtensions);
@@ -892,7 +892,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 	
 	private ObjectNode createPrograms() {
-		ObjectNode programs = objectMapper.createObjectNode();
+		ObjectNode programs = OBJECT_MAPPER.createObjectNode();
 
 		programs.set("vertexColorProgram", createVertexColorsPrograms());
 		programs.set("materialColorProgram", createMaterialColorsPrograms());
@@ -901,8 +901,8 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private JsonNode createVertexColorsPrograms() {
-		ObjectNode program = objectMapper.createObjectNode();
-		ArrayNode attributes = objectMapper.createArrayNode();
+		ObjectNode program = OBJECT_MAPPER.createObjectNode();
+		ArrayNode attributes = OBJECT_MAPPER.createArrayNode();
 
 		program.set("attributes", attributes);
 		attributes.add("a_normal");
@@ -916,8 +916,8 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private JsonNode createMaterialColorsPrograms() {
-		ObjectNode program = objectMapper.createObjectNode();
-		ArrayNode attributes = objectMapper.createArrayNode();
+		ObjectNode program = OBJECT_MAPPER.createObjectNode();
+		ArrayNode attributes = OBJECT_MAPPER.createArrayNode();
 
 		program.set("attributes", attributes);
 		attributes.add("a_normal");
@@ -933,14 +933,14 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		if (createdMaterials.contains(name)) {
 			return name;
 		}
-		ObjectNode material = objectMapper.createObjectNode();
+		ObjectNode material = OBJECT_MAPPER.createObjectNode();
 
 		material.put("name", name + "Material");
 		material.put("technique", "materialColorTechnique");
 
-		ObjectNode values = objectMapper.createObjectNode();
+		ObjectNode values = OBJECT_MAPPER.createObjectNode();
 
-		ArrayNode diffuse = objectMapper.createArrayNode();
+		ArrayNode diffuse = OBJECT_MAPPER.createArrayNode();
 		for (int i=0; i<4; i++) {
 			diffuse.add(colors[i]);
 		}
@@ -949,7 +949,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 //		diffuse.add(0);
 //		diffuse.add(1);
 
-		ArrayNode specular = objectMapper.createArrayNode();
+		ArrayNode specular = OBJECT_MAPPER.createArrayNode();
 		specular.add(0.20000000298023218);
 		specular.add(0.20000000298023218);
 		specular.add(0.20000000298023218);
@@ -968,12 +968,12 @@ public class BinaryGltfSerializer extends EmfSerializer {
 	}
 
 	private void createVertexColorMaterial() {
-		ObjectNode defaultMaterial = objectMapper.createObjectNode();
+		ObjectNode defaultMaterial = OBJECT_MAPPER.createObjectNode();
 		
 		defaultMaterial.put("name", VERTEX_COLOR_MATERIAL);
 		defaultMaterial.put("technique", "vertexColorTechnique");
 		
-		ObjectNode values = objectMapper.createObjectNode();
+		ObjectNode values = OBJECT_MAPPER.createObjectNode();
 		
 		defaultMaterial.set("values", values);
 		
@@ -982,7 +982,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 
 	private JsonNode createAsset() {
 		// TODO
-		return objectMapper.createObjectNode();
+		return OBJECT_MAPPER.createObjectNode();
 	}
 
 	private void writeHeader(LittleEndianDataOutputStream dataOutputStream, int headerLength, int sceneLength, int bodyLength) throws IOException {
