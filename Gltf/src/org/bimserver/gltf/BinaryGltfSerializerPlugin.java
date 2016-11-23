@@ -9,6 +9,7 @@ import java.util.Set;
 import org.bimserver.emf.Schema;
 import org.bimserver.plugins.PluginConfiguration;
 import org.bimserver.plugins.PluginContext;
+import org.bimserver.plugins.SchemaName;
 import org.bimserver.plugins.serializers.AbstractSerializerPlugin;
 import org.bimserver.plugins.serializers.Serializer;
 import org.bimserver.shared.exceptions.PluginException;
@@ -64,6 +65,6 @@ public class BinaryGltfSerializerPlugin extends AbstractSerializerPlugin {
 
 	@Override
 	public String getOutputFormat(Schema schema) {
-		return "GLTF_BIN_1.0";
+		return SchemaName.GLTF_BIN_1_0.name();
 	}
 }
