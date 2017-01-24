@@ -7,7 +7,6 @@ import java.nio.ByteOrder;
 import java.nio.DoubleBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -38,7 +37,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 
 	private static final String VERTEX_COLOR_MATERIAL = "VertexColorMaterial";
 	private static final int FLOAT_VEC_4 = 35666;
-	private static final int SHORT = 5122;
+//	private static final int SHORT = 5122;
 	private static final int ARRAY_BUFFER = 34962;
 	private static final int ELEMENT_ARRAY_BUFFER = 34963;
 	private static final String MAGIC = "glTF";
