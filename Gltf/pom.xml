@@ -2,7 +2,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.opensourcebim</groupId>
 	<artifactId>gltf</artifactId>
-	<version>0.0.5-SNAPSHOT</version>
+	<version>0.0.5</version>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<timestamp>${maven.build.timestamp}</timestamp>
@@ -169,7 +169,7 @@
 		<url>https://github.com/opensourceBIM/GltfSerializers.git</url>
 		<connection>scm:git:https://github.com/opensourceBIM/GltfSerializers.git</connection>
 		<developerConnection>scm:git:https://github.com/opensourceBIM/GltfSerializers.git</developerConnection>
-		<tag>HEAD</tag>
+		<tag>gltf-0.0.5</tag>
 	</scm>
 	<organization>
 		<name>OpenSource BIM</name>
