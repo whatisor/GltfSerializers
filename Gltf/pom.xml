@@ -152,7 +152,7 @@
 		<dependency>
 			<groupId>org.opensourcebim</groupId>
 			<artifactId>pluginbase</artifactId>
-			<version>1.5.99</version>
+			<version>1.5.100</version>
 		</dependency>
 	</dependencies>
 	<distributionManagement>
