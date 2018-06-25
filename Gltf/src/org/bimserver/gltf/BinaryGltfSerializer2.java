@@ -555,7 +555,10 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 			matrixArray.add(d);
 			buffer[i] = d;
 		}
-
+        String GUID = ifcProduct.getGlobalId();
+        ObjectNode extrasNode = OBJECT_MAPPER.createObjectNode();
+        nodeNode.set("extras", extrasNode);
+        extrasNode.put("ifcID", GUID);
 		nodeNode.put("mesh", meshId);
 		if (!Matrix.isIdentity(buffer)) {
 			nodeNode.set("matrix", matrixArray);
