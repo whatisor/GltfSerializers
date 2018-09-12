@@ -199,23 +199,23 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
 			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().length > 0) {
+			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().getData().length > 0) {
 				GeometryData data = geometryInfo.getData();
-				int nrIndicesBytes = data.getIndices().length;
+				int nrIndicesBytes = data.getIndices().getData().length;
 
 				totalIndicesByteLength += nrIndicesBytes / 2;
 				if (nrIndicesBytes > 4 * maxIndexValues) {
 					int nrIndices = nrIndicesBytes / 4;
 					totalVerticesByteLength += nrIndices * 3 * 4;				
 					totalNormalsByteLength += nrIndices * 3 * 4;				
-					if (data.getMaterials() != null) {
+					if (data.getColorsQuantized() != null) {
 						totalColorsByteLength += nrIndices * 4 * 4;
 					}
 				} else {
-					totalVerticesByteLength += data.getVertices().length;				
-					totalNormalsByteLength += data.getNormals().length;				
-					if (data.getMaterials() != null) {
-						totalColorsByteLength += data.getMaterials().length;
+					totalVerticesByteLength += data.getVertices().getData().length;
+					totalNormalsByteLength += data.getNormals().getData().length;
+					if (data.getColorsQuantized() != null) {
+						totalColorsByteLength += data.getColorsQuantized().getData().length;
 					}
 				}
 			}
@@ -270,7 +270,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
 			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().length > 0) {
+			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().getData().length > 0) {
 				int startPositionIndices = newIndicesBuffer.position();
 				int startPositionVertices = newVerticesBuffer.position();
 				int startPositionNormals = newNormalsBuffer.position();
@@ -278,26 +278,26 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 				
 				GeometryData data = geometryInfo.getData();
 				
-				ByteBuffer indicesBuffer = ByteBuffer.wrap(data.getIndices());
+				ByteBuffer indicesBuffer = ByteBuffer.wrap(data.getIndices().getData());
 				indicesBuffer.order(ByteOrder.LITTLE_ENDIAN);
 				IntBuffer indicesIntBuffer = indicesBuffer.asIntBuffer();
 				
-				ByteBuffer verticesBuffer = ByteBuffer.wrap(data.getVertices());
+				ByteBuffer verticesBuffer = ByteBuffer.wrap(data.getVertices().getData());
 				verticesBuffer.order(ByteOrder.LITTLE_ENDIAN);
 				FloatBuffer verticesFloatBuffer = verticesBuffer.asFloatBuffer();
 				
-				ByteBuffer normalsBuffer = ByteBuffer.wrap(data.getNormals());
+				ByteBuffer normalsBuffer = ByteBuffer.wrap(data.getNormals().getData());
 				normalsBuffer.order(ByteOrder.LITTLE_ENDIAN);
 				FloatBuffer normalsFloatBuffer = normalsBuffer.asFloatBuffer();
 
 				FloatBuffer materialsFloatBuffer = null;
-				if (data.getMaterials() != null) {
-					ByteBuffer materialsBuffer = ByteBuffer.wrap(data.getMaterials());
+				if (data.getColorsQuantized() != null) {
+					ByteBuffer materialsBuffer = ByteBuffer.wrap(data.getColorsQuantized().getData());
 					materialsBuffer.order(ByteOrder.LITTLE_ENDIAN);
 					materialsFloatBuffer = materialsBuffer.asFloatBuffer();
 				}
 				
-				if (data.getIndices().length > 4 * maxIndexValues) {
+				if (data.getIndices().getData().length > 4 * maxIndexValues) {
 					int totalNrIndices = indicesIntBuffer.capacity();
 					int nrParts = (totalNrIndices + maxIndexValues - 1) / maxIndexValues;
 					
@@ -377,7 +377,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 						int verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, nrVertices);
 						int normalsAccessor = addNormalsAccessor(ifcProduct, normalsBufferView, startPositionNormals, nrVertices);
 						int colorAccessor = -1;
-						if (data.getMaterials() != null) {
+						if (data.getColorsQuantized() != null) {
 							if (colorsBufferView == -1) {
 								colorsBufferView = createBufferView(totalColorsByteLength, totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength, ARRAY_BUFFER, 16);
 							}
@@ -418,10 +418,10 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 					int[] min = new int[]{0};
 					int[] max = new int[]{maxVal};
 
-					newVerticesBuffer.put(data.getVertices());
-					newNormalsBuffer.put(data.getNormals());
-					if (data.getMaterials() != null) {
-						newColorsBuffer.put(data.getMaterials());
+					newVerticesBuffer.put(data.getVertices().getData());
+					newNormalsBuffer.put(data.getNormals().getData());
+					if (data.getColorsQuantized() != null) {
+						newColorsBuffer.put(data.getColorsQuantized().getData());
 					}
 					
 					int totalNrIndices = indicesIntBuffer.capacity();
@@ -431,14 +431,14 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 					ObjectNode primitiveNode = OBJECT_MAPPER.createObjectNode();
 					
 					int indicesAccessor = addIndicesAccessor(ifcProduct, indicesBufferView, startPositionIndices, totalNrIndices, min, max);
-					int verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, data.getVertices().length / 12);
-					int normalsAccessor = addNormalsAccessor(ifcProduct, normalsBufferView, startPositionNormals, data.getNormals().length / 12);
+					int verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, data.getVertices().getData().length / 12);
+					int normalsAccessor = addNormalsAccessor(ifcProduct, normalsBufferView, startPositionNormals, data.getNormals().getData().length / 12);
 					int colorAccessor = -1;
-					if (data.getMaterials() != null) {
+					if (data.getColorsQuantized() != null) {
 						if (colorsBufferView == -1) {
 							colorsBufferView = createBufferView(totalColorsByteLength, totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength, ARRAY_BUFFER, 16);
 						}
-						colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors, data.getVertices().length / 12);
+						colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors, data.getVertices().getData().length / 12);
 					}
 					primitivesNode.add(primitiveNode);
 					
@@ -523,7 +523,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 	}
 	
 	private void updateExtends(GeometryInfo geometryInfo, float[] matrix) {
-		ByteBuffer verticesByteBufferBuffer = ByteBuffer.wrap(geometryInfo.getData().getVertices());
+		ByteBuffer verticesByteBufferBuffer = ByteBuffer.wrap(geometryInfo.getData().getVertices().getData());
 		verticesByteBufferBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		FloatBuffer floatBuffer = verticesByteBufferBuffer.asFloatBuffer();
 		for (int i=0; i<floatBuffer.capacity(); i+=3) {
@@ -664,7 +664,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 			System.out.println();
 		}
 		GeometryData data = ifcProduct.getGeometry().getData();
-		ByteBuffer verticesBuffer = ByteBuffer.wrap(data.getVertices());
+		ByteBuffer verticesBuffer = ByteBuffer.wrap(data.getVertices().getData());
 
 		ObjectNode accessor = OBJECT_MAPPER.createObjectNode();
 		accessor.put("bufferView", bufferViewIndex);
