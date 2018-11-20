@@ -31,10 +31,13 @@ import org.bimserver.geometry.IfcColors;
 import org.bimserver.geometry.Matrix;
 import org.bimserver.models.geometry.GeometryData;
 import org.bimserver.models.geometry.GeometryInfo;
+import org.bimserver.models.ifc2x3tc1.IfcAnnotation;
 import org.bimserver.models.ifc2x3tc1.IfcProduct;
 import org.bimserver.plugins.serializers.EmfSerializer;
 import org.bimserver.plugins.serializers.ProgressReporter;
 import org.bimserver.plugins.serializers.SerializerException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -52,7 +55,8 @@ import com.google.common.io.LittleEndianDataOutputStream;
  */
 public class BinaryGltfSerializer2 extends EmfSerializer {
 
-	private static final int FLOAT_VEC_4 = 35666;
+	private static final Logger LOGGER = LoggerFactory.getLogger(BinaryGltfSerializer2.class);
+//	private static final int FLOAT_VEC_4 = 35666;
 //	private static final int SHORT = 5122;
 	private static final int ARRAY_BUFFER = 34962;
 	private static final int ELEMENT_ARRAY_BUFFER = 34963;
@@ -70,7 +74,6 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 	private ByteBuffer body;
 	private ArrayNode meshes;
 	private ArrayNode accessors;
-	private int accessorCounter = 0;
 	private ArrayNode buffersViews;
 	private ArrayNode defaultSceneNodes;
 	private ArrayNode scenesNode;
@@ -86,7 +89,6 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 	float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
 	private ArrayNode modelTranslation;
 	private ArrayNode materials;
-	private ObjectNode shaders;
 	
 	private final Map<String, Integer> createdMaterials = new HashMap<>();
 	private ArrayNode translationChildrenNode;
@@ -110,7 +112,6 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		accessors = OBJECT_MAPPER.createArrayNode();
 		nodes = OBJECT_MAPPER.createArrayNode();
 		materials = OBJECT_MAPPER.createArrayNode();
-		shaders = OBJECT_MAPPER.createObjectNode();
 		
 		gltfNode.set("meshes", meshes);
 		gltfNode.set("bufferViews", buffersViews);
@@ -119,7 +120,6 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		gltfNode.set("nodes", nodes);
 		gltfNode.set("buffers", buffers);
 		gltfNode.set("materials", materials);
-//		gltfNode.set("shaders", shaders);
 		
 		createVertexColorMaterial();
 
@@ -137,7 +137,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 			writeScene(dataOutputStream, sceneBytes);
 			writeBody(dataOutputStream, body.array());
 			dataOutputStream.flush();
-		} catch (IOException e) {
+		} catch (Exception e) {
 			throw new SerializerException(e);
 		}
 		return false;
@@ -199,7 +199,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
 			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().getData().length > 0) {
+			if (geometryInfo != null && !ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo.getData() != null && geometryInfo.getData().getVertices() != null && geometryInfo.getData().getVertices().getData().length > 0) {
 				GeometryData data = geometryInfo.getData();
 				int nrIndicesBytes = data.getIndices().getData().length;
 
@@ -210,15 +210,22 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 					totalNormalsByteLength += nrIndices * 3 * 4;				
 					if (data.getColorsQuantized() != null) {
 						totalColorsByteLength += nrIndices * 4 * 4;
+					} else {
+						LOGGER.info("No colors");
 					}
 				} else {
 					totalVerticesByteLength += data.getVertices().getData().length;
 					totalNormalsByteLength += data.getNormals().getData().length;
 					if (data.getColorsQuantized() != null) {
-						totalColorsByteLength += data.getColorsQuantized().getData().length;
+						totalColorsByteLength += data.getColorsQuantized().getData().length * 4;
+					} else {
+						totalColorsByteLength += data.getVertices().getData().length * 4 / 3;
 					}
 				}
 			}
+		}
+		if (totalIndicesByteLength == 0) {
+			throw new SerializerException("No geometry");
 		}
 		totalBodyByteLength = totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength + totalColorsByteLength;
 
@@ -247,8 +254,8 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		createModelNode();
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
-			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null) {
+			if (checkGeometry(ifcProduct, false)) {
+				GeometryInfo geometryInfo = ifcProduct.getGeometry();
 				ByteBuffer matrixByteBuffer = ByteBuffer.wrap(ifcProduct.getGeometry().getTransformation());
 				matrixByteBuffer.order(ByteOrder.LITTLE_ENDIAN);
 				DoubleBuffer doubleBuffer = matrixByteBuffer.asDoubleBuffer();
@@ -270,7 +277,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
 			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().getData().length > 0) {
+			if (checkGeometry(ifcProduct, true)) {
 				int startPositionIndices = newIndicesBuffer.position();
 				int startPositionVertices = newVerticesBuffer.position();
 				int startPositionNormals = newNormalsBuffer.position();
@@ -290,11 +297,10 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 				normalsBuffer.order(ByteOrder.LITTLE_ENDIAN);
 				FloatBuffer normalsFloatBuffer = normalsBuffer.asFloatBuffer();
 
-				FloatBuffer materialsFloatBuffer = null;
+				ByteBuffer materialsBuffer = null;
 				if (data.getColorsQuantized() != null) {
-					ByteBuffer materialsBuffer = ByteBuffer.wrap(data.getColorsQuantized().getData());
-					materialsBuffer.order(ByteOrder.LITTLE_ENDIAN);
-					materialsFloatBuffer = materialsBuffer.asFloatBuffer();
+					byte[] colorData = data.getColorsQuantized().getData();
+					materialsBuffer = ByteBuffer.wrap(colorData);
 				}
 				
 				if (data.getIndices().getData().length > 4 * maxIndexValues) {
@@ -350,25 +356,27 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex3 * 3 + 1));
 							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex3 * 3 + 2));
 						}
-						if (materialsFloatBuffer != null) {
+						if (materialsBuffer != null) {
 							for (int i=part * maxIndexValues; i<upto; i+=3) {
 								int oldIndex1 = indicesIntBuffer.get(i);
 								int oldIndex2 = indicesIntBuffer.get(i+1);
 								int oldIndex3 = indicesIntBuffer.get(i+2);
 								
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex1 * 4));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex1 * 4 + 1));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex1 * 4 + 2));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex1 * 4 + 3));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex2 * 4));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex2 * 4 + 1));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex2 * 4 + 2));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex2 * 4 + 3));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex3 * 4));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex3 * 4 + 1));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex3 * 4 + 2));
-								newColorsBuffer.putFloat(materialsFloatBuffer.get(oldIndex3 * 4 + 3));
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex1) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex1 + 1) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex1 + 2) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex1 + 3) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex2) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex2 + 1) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex2 + 2) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex2 + 3) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex3) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex3 + 1) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex3 + 2) / 255f);
+								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex3 + 3) / 255f);
 							}
+						} else {
+							LOGGER.info("No color");
 						}
 						
 						ObjectNode primitiveNode = OBJECT_MAPPER.createObjectNode();
@@ -421,7 +429,26 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 					newVerticesBuffer.put(data.getVertices().getData());
 					newNormalsBuffer.put(data.getNormals().getData());
 					if (data.getColorsQuantized() != null) {
-						newColorsBuffer.put(data.getColorsQuantized().getData());
+						byte[] colorData = data.getColorsQuantized().getData();
+						for (int i=0; i<colorData.length; i++) {
+							newColorsBuffer.putFloat(colorData[i] / 255f);
+						}
+					} else {
+						if (data.getColor() != null) {
+							for (int i=0; i<data.getVertices().getData().length / 12; i++) {
+								newColorsBuffer.putFloat(data.getColor().getX());
+								newColorsBuffer.putFloat(data.getColor().getY());
+								newColorsBuffer.putFloat(data.getColor().getZ());
+								newColorsBuffer.putFloat(data.getColor().getW());
+							}
+						} else {
+							for (int i=0; i<data.getVertices().getData().length / 12; i++) {
+								newColorsBuffer.putFloat(0);
+								newColorsBuffer.putFloat(1);
+								newColorsBuffer.putFloat(0);
+								newColorsBuffer.putFloat(1);
+							}
+						}
 					}
 					
 					int totalNrIndices = indicesIntBuffer.capacity();
@@ -485,33 +512,41 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		body.put(newNormalsBuffer);
 		body.put(newColorsBuffer);
 
-		int vertexColorFragmentShaderBufferViewName = createBufferView(vertexColorFragmentShaderBytes.length, body.position(), -1, -1);
-		body.put(vertexColorFragmentShaderBytes);
-
-		int vertexColorVertexShaderBufferViewName = createBufferView(vertexColorVertexShaderBytes.length, body.position(), -1, -1);
-		body.put(vertexColorVertexShaderBytes);
-
-		int materialColorFragmentShaderBufferViewName = createBufferView(materialColorFragmentShaderBytes.length, body.position(), -1, -1);
-		body.put(materialColorFragmentShaderBytes);
-		
-		int materialColorVertexShaderBufferViewName = createBufferView(materialColorVertexShaderBytes.length, body.position(), -1, -1);
-		body.put(materialColorVertexShaderBytes);
-		
-//		gltfNode.set("animations", createAnimations());
 		gltfNode.set("asset", createAsset());
-//		gltfNode.set("programs", createPrograms());
 		gltfNode.put("scene", 0);
-//		gltfNode.set("skins", createSkins());
-//		gltfNode.set("techniques", createTechniques());
-
-//		createVertexColorShaders(vertexColorFragmentShaderBufferViewName, vertexColorVertexShaderBufferViewName);
-//		createMaterialColorShaders(materialColorFragmentShaderBufferViewName, materialColorVertexShaderBufferViewName);
 		
 		addBuffer(body.capacity());
+	}
 
-//		ArrayNode extensions = OBJECT_MAPPER.createArrayNode();
-//		extensions.add("KHR_binary_glTF");
-//		gltfNode.set("extensionsUsed", extensions);
+	private boolean checkGeometry(IfcProduct ifcProduct, boolean print) {
+		String name = ifcProduct.eClass().getName();
+		if (name.equals("IfcOpeningElement") || name.equals("IfcBuildingStorey") || name.equals("IfcBuilding")) {
+			return false;
+		}
+		GeometryInfo geometryInfo = ifcProduct.getGeometry();
+		if (geometryInfo == null) {
+			if (ifcProduct instanceof IfcAnnotation) {
+				return false;
+			}
+			if (print) {
+				LOGGER.info("No GeometryInfo for " + name);
+			}
+			return false;
+		}
+		GeometryData geometryData = geometryInfo.getData();
+		if (geometryData == null) {
+			if (print) {
+				LOGGER.info("No GeometryData for " + name);
+			}
+			return false;
+		}
+		if (geometryData.getVertices() == null) {
+			if (print) {
+				LOGGER.info("No Vertices for " + name);
+			}
+			return false;
+		}
+		return true;
 	}
 
 	private float[] getOffsets() {
@@ -523,6 +558,9 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 	}
 	
 	private void updateExtends(GeometryInfo geometryInfo, float[] matrix) {
+		if (geometryInfo.getData() == null || geometryInfo.getData().getVertices() == null) {
+			return;
+		}
 		ByteBuffer verticesByteBufferBuffer = ByteBuffer.wrap(geometryInfo.getData().getVertices().getData());
 		verticesByteBufferBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		FloatBuffer floatBuffer = verticesByteBufferBuffer.asFloatBuffer();
@@ -660,9 +698,6 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		if (count <= 0) {
 			throw new SerializerException("Count <= 0");
 		}
-		if (count * 12 == 9000) {
-			System.out.println();
-		}
 		GeometryData data = ifcProduct.getGeometry().getData();
 		ByteBuffer verticesBuffer = ByteBuffer.wrap(data.getVertices().getData());
 
@@ -751,242 +786,6 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		buffers.add(bufferNode);
 	}
 
-	private JsonNode createAnimations() {
-		return OBJECT_MAPPER.createArrayNode();
-	}
-
-	private JsonNode createTechniques() {
-		ObjectNode techniques = OBJECT_MAPPER.createObjectNode();
-
-		techniques.set("vertexColorTechnique", createVertexColorTechnique());
-		techniques.set("materialColorTechnique", createMaterialColorTechnique());
-
-		return techniques;
-	}
-
-	private ObjectNode createMaterialColorTechnique() {
-		ObjectNode technique = OBJECT_MAPPER.createObjectNode();
-
-		ObjectNode attributes = OBJECT_MAPPER.createObjectNode();
-		ObjectNode parameters = OBJECT_MAPPER.createObjectNode();
-		ObjectNode states = OBJECT_MAPPER.createObjectNode();
-		ObjectNode uniforms = OBJECT_MAPPER.createObjectNode();
-
-		attributes.put("a_normal", "normal");
-		attributes.put("a_position", "position");
-
-		ObjectNode diffuse = OBJECT_MAPPER.createObjectNode();
-		diffuse.put("type", 35666);
-		parameters.set("diffuse", diffuse);
-
-		ObjectNode modelViewMatrix = OBJECT_MAPPER.createObjectNode();
-		modelViewMatrix.put("semantic", "MODELVIEW");
-		modelViewMatrix.put("type", 35676);
-		parameters.set("modelViewMatrix", modelViewMatrix);
-
-		ObjectNode normal = OBJECT_MAPPER.createObjectNode();
-		normal.put("semantic", "NORMAL");
-		normal.put("type", 35665);
-		parameters.set("normal", normal);
-
-		ObjectNode normalMatrix = OBJECT_MAPPER.createObjectNode();
-		normalMatrix.put("semantic", "MODELVIEWINVERSETRANSPOSE");
-		normalMatrix.put("type", 35675);
-		parameters.set("normalMatrix", normalMatrix);
-
-		ObjectNode position = OBJECT_MAPPER.createObjectNode();
-		position.put("semantic", "POSITION");
-		position.put("type", 35665);
-		parameters.set("position", position);
-
-		ObjectNode projectionMatrix = OBJECT_MAPPER.createObjectNode();
-		projectionMatrix.put("semantic", "PROJECTION");
-		projectionMatrix.put("type", 35676);
-		parameters.set("projectionMatrix", projectionMatrix);
-
-		ObjectNode shininess = OBJECT_MAPPER.createObjectNode();
-		shininess.put("type", 5126);
-		parameters.set("shininess", shininess);
-
-		ObjectNode specular = OBJECT_MAPPER.createObjectNode();
-		specular.put("type", 35666);
-		parameters.set("specular", specular);
-
-		technique.put("program", "materialColorProgram");
-
-		ArrayNode statesEnable = OBJECT_MAPPER.createArrayNode();
-		statesEnable.add(2929);
-		statesEnable.add(2884);
-		states.set("enable", statesEnable);
-
-		uniforms.put("u_diffuse", "diffuse");
-		uniforms.put("u_modelViewMatrix", "modelViewMatrix");
-		uniforms.put("u_normalMatrix", "normalMatrix");
-		uniforms.put("u_projectionMatrix", "projectionMatrix");
-		uniforms.put("u_shininess", "shininess");
-		uniforms.put("u_specular", "specular");
-
-		technique.set("attributes", attributes);
-		technique.set("parameters", parameters);
-		technique.set("states", states);
-		technique.set("uniforms", uniforms);
-		
-		return technique;
-	}
-
-	private ObjectNode createVertexColorTechnique() {
-		ObjectNode technique = OBJECT_MAPPER.createObjectNode();
-
-		ObjectNode attributes = OBJECT_MAPPER.createObjectNode();
-		ObjectNode parameters = OBJECT_MAPPER.createObjectNode();
-		ObjectNode states = OBJECT_MAPPER.createObjectNode();
-		ObjectNode uniforms = OBJECT_MAPPER.createObjectNode();
-
-		attributes.put("a_normal", "normal");
-		attributes.put("a_position", "position");
-		attributes.put("a_color", "color");
-
-		ObjectNode modelViewMatrix = OBJECT_MAPPER.createObjectNode();
-		modelViewMatrix.put("semantic", "MODELVIEW");
-		modelViewMatrix.put("type", 35676);
-		parameters.set("modelViewMatrix", modelViewMatrix);
-
-		ObjectNode normal = OBJECT_MAPPER.createObjectNode();
-		normal.put("semantic", "NORMAL");
-		normal.put("type", 35665);
-		parameters.set("normal", normal);
-
-		ObjectNode normalMatrix = OBJECT_MAPPER.createObjectNode();
-		normalMatrix.put("semantic", "MODELVIEWINVERSETRANSPOSE");
-		normalMatrix.put("type", 35675);
-		parameters.set("normalMatrix", normalMatrix);
-
-		ObjectNode position = OBJECT_MAPPER.createObjectNode();
-		position.put("semantic", "POSITION");
-		position.put("type", 35665);
-		parameters.set("position", position);
-
-		ObjectNode color = OBJECT_MAPPER.createObjectNode();
-		color.put("semantic", "COLOR");
-		color.put("type", FLOAT_VEC_4);
-		parameters.set("color", color);
-
-		ObjectNode projectionMatrix = OBJECT_MAPPER.createObjectNode();
-		projectionMatrix.put("semantic", "PROJECTION");
-		projectionMatrix.put("type", 35676);
-		parameters.set("projectionMatrix", projectionMatrix);
-
-		technique.put("program", "vertexColorProgram");
-
-		ArrayNode statesEnable = OBJECT_MAPPER.createArrayNode();
-		statesEnable.add(2929);
-		statesEnable.add(2884);
-		states.set("enable", statesEnable);
-
-		uniforms.put("u_modelViewMatrix", "modelViewMatrix");
-		uniforms.put("u_normalMatrix", "normalMatrix");
-		uniforms.put("u_projectionMatrix", "projectionMatrix");
-
-		technique.set("attributes", attributes);
-		technique.set("parameters", parameters);
-		technique.set("states", states);
-		technique.set("uniforms", uniforms);
-		
-		return technique;
-	}
-
-	private JsonNode createSkins() {
-		return OBJECT_MAPPER.createArrayNode();
-	}
-
-	private void createVertexColorShaders(String fragmentShaderBufferViewName, String vertexShaderBufferViewName) {
-		ObjectNode fragmentShaderExtensions = OBJECT_MAPPER.createObjectNode();
-		ObjectNode fragmentShaderBinary = OBJECT_MAPPER.createObjectNode();
-		fragmentShaderExtensions.set("KHR_binary_glTF", fragmentShaderBinary);
-		fragmentShaderBinary.put("bufferView", fragmentShaderBufferViewName);
-
-		ObjectNode fragmentShader = OBJECT_MAPPER.createObjectNode();
-		fragmentShader.put("type", 35632);
-		fragmentShader.put("uri", "data:,");
-		fragmentShader.set("extensions", fragmentShaderExtensions);
-
-		ObjectNode vertexShaderExtensions = OBJECT_MAPPER.createObjectNode();
-		ObjectNode vertexShaderBinary = OBJECT_MAPPER.createObjectNode();
-		vertexShaderExtensions.set("KHR_binary_glTF", vertexShaderBinary);
-		vertexShaderBinary.put("bufferView", vertexShaderBufferViewName);
-
-		ObjectNode vertexShader = OBJECT_MAPPER.createObjectNode();
-		vertexShader.put("type", 35633);
-		vertexShader.put("uri", "data:,");
-		vertexShader.set("extensions", vertexShaderExtensions);
-
-		shaders.set("vertexColorFragmentShader", fragmentShader);
-		shaders.set("vertexColorVertexShader", vertexShader);
-	}
-
-	private void createMaterialColorShaders(String fragmentShaderBufferViewName, String vertexShaderBufferViewName) {
-		ObjectNode fragmentShaderExtensions = OBJECT_MAPPER.createObjectNode();
-		ObjectNode fragmentShaderBinary = OBJECT_MAPPER.createObjectNode();
-		fragmentShaderExtensions.set("KHR_binary_glTF", fragmentShaderBinary);
-		fragmentShaderBinary.put("bufferView", fragmentShaderBufferViewName);
-
-		ObjectNode fragmentShader = OBJECT_MAPPER.createObjectNode();
-		fragmentShader.put("type", 35632);
-		fragmentShader.put("uri", "data:,");
-		fragmentShader.set("extensions", fragmentShaderExtensions);
-
-		ObjectNode vertexShaderExtensions = OBJECT_MAPPER.createObjectNode();
-		ObjectNode vertexShaderBinary = OBJECT_MAPPER.createObjectNode();
-		vertexShaderExtensions.set("KHR_binary_glTF", vertexShaderBinary);
-		vertexShaderBinary.put("bufferView", vertexShaderBufferViewName);
-
-		ObjectNode vertexShader = OBJECT_MAPPER.createObjectNode();
-		vertexShader.put("type", 35633);
-		vertexShader.put("uri", "data:,");
-		vertexShader.set("extensions", vertexShaderExtensions);
-
-		shaders.set("materialColorFragmentShader", fragmentShader);
-		shaders.set("materialColorVertexShader", vertexShader);
-	}
-	
-	private ObjectNode createPrograms() {
-		ObjectNode programs = OBJECT_MAPPER.createObjectNode();
-
-		programs.set("vertexColorProgram", createVertexColorsPrograms());
-		programs.set("materialColorProgram", createMaterialColorsPrograms());
-
-		return programs;
-	}
-
-	private JsonNode createVertexColorsPrograms() {
-		ObjectNode program = OBJECT_MAPPER.createObjectNode();
-		ArrayNode attributes = OBJECT_MAPPER.createArrayNode();
-
-		program.set("attributes", attributes);
-		attributes.add("a_normal");
-		attributes.add("a_position");
-		attributes.add("a_color");
-
-		program.put("fragmentShader", "vertexColorFragmentShader");
-		program.put("vertexShader", "vertexColorVertexShader");
-		
-		return program;
-	}
-
-	private JsonNode createMaterialColorsPrograms() {
-		ObjectNode program = OBJECT_MAPPER.createObjectNode();
-		ArrayNode attributes = OBJECT_MAPPER.createArrayNode();
-
-		program.set("attributes", attributes);
-		attributes.add("a_normal");
-		attributes.add("a_position");
-
-		program.put("fragmentShader", "materialColorFragmentShader");
-		program.put("vertexShader", "materialColorVertexShader");
-
-		return program;
-	}
-	
 	private int createOrGetMaterial(String name, float[] colors) {
 		if (createdMaterials.containsKey(name)) {
 			return createdMaterials.get(name);

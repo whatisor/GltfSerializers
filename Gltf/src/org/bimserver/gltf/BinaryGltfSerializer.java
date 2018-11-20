@@ -135,7 +135,7 @@ public class BinaryGltfSerializer extends EmfSerializer {
 			writeHeader(dataOutputStream, 20, sceneBytes.length, body.capacity());
 			writeScene(dataOutputStream, sceneBytes);
 			writeBody(dataOutputStream, body.array());
-		} catch (IOException e) {
+		} catch (Exception e) {
 			throw new SerializerException(e);
 		}
 		return false;

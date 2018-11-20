@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.bimserver.emf.Schema;
@@ -66,8 +67,13 @@ public class BinaryGltfSerializerPlugin2 extends AbstractSerializerPlugin {
 	}
 
 	@Override
-	public boolean needsGeometry() {
-		return true;
+	public Set<String> getRequiredGeometryFields() {
+		Set<String> set = new HashSet<>();
+		set.add("indices");
+		set.add("vertices");
+		set.add("normals");
+		set.add("colorsQuantized");
+		return set;
 	}
 
 	@Override
