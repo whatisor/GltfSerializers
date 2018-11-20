@@ -45,6 +45,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Charsets;
 import com.google.common.io.LittleEndianDataOutputStream;
+import com.google.common.primitives.UnsignedBytes;
 
 /**
  * @author Ruben de Laat
@@ -431,7 +432,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 					if (data.getColorsQuantized() != null) {
 						byte[] colorData = data.getColorsQuantized().getData();
 						for (int i=0; i<colorData.length; i++) {
-							newColorsBuffer.putFloat(colorData[i] / 255f);
+							newColorsBuffer.putFloat(UnsignedBytes.toInt(colorData[i]) / 255f);
 						}
 					} else {
 						if (data.getColor() != null) {
