@@ -32,7 +32,6 @@ import org.bimserver.geometry.Matrix;
 import org.bimserver.models.geometry.GeometryData;
 import org.bimserver.models.geometry.GeometryInfo;
 import org.bimserver.models.ifc2x3tc1.IfcProduct;
-import org.bimserver.plugins.serializers.EmfSerializer;
 import org.bimserver.plugins.serializers.ProgressReporter;
 import org.bimserver.plugins.serializers.SerializerException;
 
@@ -50,7 +49,7 @@ import com.google.common.io.LittleEndianDataOutputStream;
  *         be computed in advance, so no streaming is possible
  *
  */
-public class BinaryGltfSerializer extends EmfSerializer {
+public class BinaryGltfSerializer extends BinaryGltfBaseSerializer {
 
 	private static final String VERTEX_COLOR_MATERIAL = "VertexColorMaterial";
 	private static final int FLOAT_VEC_4 = 35666;
@@ -176,8 +175,8 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		int maxIndexValues = 16389;
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
-			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().getData().length > 0) {
+			if (checkGeometry(ifcProduct, true)) {
+				GeometryInfo geometryInfo = ifcProduct.getGeometry();
 				GeometryData data = geometryInfo.getData();
 				int nrIndicesBytes = data.getIndices().getData().length;
 
@@ -224,8 +223,8 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		createModelNode();
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
-			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null) {
+			if (checkGeometry(ifcProduct, false)) {
+				GeometryInfo geometryInfo = ifcProduct.getGeometry();
 				ByteBuffer matrixByteBuffer = ByteBuffer.wrap(ifcProduct.getGeometry().getTransformation());
 				matrixByteBuffer.order(ByteOrder.LITTLE_ENDIAN);
 				DoubleBuffer doubleBuffer = matrixByteBuffer.asDoubleBuffer();
@@ -246,8 +245,8 @@ public class BinaryGltfSerializer extends EmfSerializer {
 		modelTranslation.add(-offsets[2]);
 
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
-			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (!ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo != null && geometryInfo.getData().getVertices().getData().length > 0) {
+			if (checkGeometry(ifcProduct, false)) {
+				GeometryInfo geometryInfo = ifcProduct.getGeometry();
 				int startPositionIndices = newIndicesBuffer.position();
 				int startPositionVertices = newVerticesBuffer.position();
 				int startPositionNormals = newNormalsBuffer.position();
