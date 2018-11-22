@@ -427,7 +427,12 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
         extrasNode.put("ifcID", GUID);
 		nodeNode.put("mesh", meshId);
 		if (!Matrix.isIdentity(buffer)) {
-			nodeNode.set("matrix", matrixArray);
+			if (!Matrix.invertM(new double[16], 0, buffer, 0)) {
+				LOGGER.info("Could not invert matrix, omitting");
+				// Cannot be inverted, we know cesium at least doesn't like that
+			} else {
+				nodeNode.set("matrix", matrixArray);
+			}
 		}
 		nodes.add(nodeNode);
 
