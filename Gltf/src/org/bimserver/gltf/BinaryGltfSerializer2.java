@@ -31,6 +31,7 @@ import org.bimserver.geometry.IfcColors;
 import org.bimserver.geometry.Matrix;
 import org.bimserver.models.geometry.GeometryData;
 import org.bimserver.models.geometry.GeometryInfo;
+import org.bimserver.models.geometry.Vector4f;
 import org.bimserver.models.ifc2x3tc1.IfcProduct;
 import org.bimserver.plugins.serializers.ProgressReporter;
 import org.bimserver.plugins.serializers.SerializerException;
@@ -55,14 +56,13 @@ import com.google.common.primitives.UnsignedBytes;
 public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(BinaryGltfSerializer2.class);
-//	private static final int FLOAT_VEC_4 = 35666;
-//	private static final int SHORT = 5122;
 	private static final int ARRAY_BUFFER = 34962;
 	private static final int ELEMENT_ARRAY_BUFFER = 34963;
 	private static final int MAGIC = 0x46546C67;
-	private static final int UNSIGNED_SHORT = 5123;
+	private static final int UNSIGNED_INT = 5125;
 	private static final int TRIANGLES = 4;
 	private static final int FLOAT = 5126;
+	private static final int UNSIGNED_BYTE = 5121;
 	private static final int JSON_CHUNK = 0x4E4F534A;
 	private static final int BINARY_CHUNK = 0x004E4942;
 	private static final int FORMAT_VERSION = 2;
@@ -79,11 +79,6 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 	private ObjectNode gltfNode;
 	private ArrayNode nodes;
 	
-	private byte[] vertexColorFragmentShaderBytes;
-	private byte[] vertexColorVertexShaderBytes;
-	private byte[] materialColorFragmentShaderBytes;
-	private byte[] materialColorVertexShaderBytes;
-	
 	float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
 	float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
 	private ArrayNode modelTranslation;
@@ -93,15 +88,12 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 	private ArrayNode translationChildrenNode;
 	private int vertexColorIndex;
 
-	public BinaryGltfSerializer2(byte[] vertexColorFragmentShaderBytes, byte[] vertexColorVertexShaderBytes, byte[] materialColorFragmentShaderBytes, byte[] materialColorVertexShaderBytes) {
-		this.vertexColorFragmentShaderBytes = vertexColorFragmentShaderBytes;
-		this.vertexColorVertexShaderBytes = vertexColorVertexShaderBytes;
-		this.materialColorFragmentShaderBytes = materialColorFragmentShaderBytes;
-		this.materialColorVertexShaderBytes = materialColorVertexShaderBytes;
+	public BinaryGltfSerializer2() {
 	}
 
 	@Override
 	protected boolean write(OutputStream outputStream, ProgressReporter progressReporter) throws SerializerException {
+		LOGGER.info("Starting serialization");
 		gltfNode = OBJECT_MAPPER.createObjectNode();
 
 		buffers = OBJECT_MAPPER.createArrayNode();
@@ -132,7 +124,9 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 //			System.out.println(stringWriter);
 
 			byte[] sceneBytes = gltfNode.toString().getBytes(Charsets.UTF_8);
-			writeHeader(dataOutputStream, 12, 8 + sceneBytes.length + (sceneBytes.length % 4 == 0 ? 0 : 4 - sceneBytes.length % 4), 8 + body.capacity() + (body.capacity() % 4 == 4 ? 0 : 4 - body.capacity() % 4));
+			int sceneLength = sceneBytes.length + (sceneBytes.length % 4 == 0 ? 0 : 4 - sceneBytes.length % 4);
+			int bodyLength = body.capacity() + (body.capacity() % 4 == 0 ? 0 : 4 - body.capacity() % 4);
+			writeHeader(dataOutputStream, 12, 8 + sceneLength, 8 + bodyLength);
 			writeScene(dataOutputStream, sceneBytes);
 			writeBody(dataOutputStream, body.array());
 			dataOutputStream.flush();
@@ -194,32 +188,19 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		int totalNormalsByteLength = 0;
 		int totalColorsByteLength = 0;
 
-		int maxIndexValues = 16389;
-
 		for (IfcProduct ifcProduct : model.getAllWithSubTypes(IfcProduct.class)) {
-			GeometryInfo geometryInfo = ifcProduct.getGeometry();
-			if (geometryInfo != null && !ifcProduct.eClass().getName().equals("IfcOpeningElement") && geometryInfo.getData() != null && geometryInfo.getData().getVertices() != null && geometryInfo.getData().getVertices().getData().length > 0) {
+			if (checkGeometry(ifcProduct, false)) {
+				GeometryInfo geometryInfo = ifcProduct.getGeometry();
 				GeometryData data = geometryInfo.getData();
 				int nrIndicesBytes = data.getIndices().getData().length;
 
-				totalIndicesByteLength += nrIndicesBytes / 2;
-				if (nrIndicesBytes > 4 * maxIndexValues) {
-					int nrIndices = nrIndicesBytes / 4;
-					totalVerticesByteLength += nrIndices * 3 * 4;				
-					totalNormalsByteLength += nrIndices * 3 * 4;				
-					if (data.getColorsQuantized() != null) {
-						totalColorsByteLength += nrIndices * 4 * 4;
-					} else {
-						LOGGER.info("No colors");
-					}
+				totalIndicesByteLength += nrIndicesBytes;
+				totalVerticesByteLength += data.getVertices().getData().length;
+				totalNormalsByteLength += data.getNormals().getData().length;
+				if (data.getColorsQuantized() != null) {
+					totalColorsByteLength += data.getColorsQuantized().getData().length;
 				} else {
-					totalVerticesByteLength += data.getVertices().getData().length;
-					totalNormalsByteLength += data.getNormals().getData().length;
-					if (data.getColorsQuantized() != null) {
-						totalColorsByteLength += data.getColorsQuantized().getData().length * 4;
-					} else {
-						totalColorsByteLength += data.getVertices().getData().length * 4 / 3;
-					}
+					totalColorsByteLength += data.getVertices().getData().length / 3;
 				}
 			}
 		}
@@ -228,7 +209,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		}
 		totalBodyByteLength = totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength + totalColorsByteLength;
 
-		body = ByteBuffer.allocate(totalBodyByteLength + materialColorFragmentShaderBytes.length + materialColorVertexShaderBytes.length + vertexColorFragmentShaderBytes.length + vertexColorVertexShaderBytes.length);
+		body = ByteBuffer.allocate(totalBodyByteLength);
 		body.order(ByteOrder.LITTLE_ENDIAN);
 		
 		ByteBuffer newIndicesBuffer = ByteBuffer.allocate(totalIndicesByteLength);
@@ -290,201 +271,80 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 				
 				ByteBuffer verticesBuffer = ByteBuffer.wrap(data.getVertices().getData());
 				verticesBuffer.order(ByteOrder.LITTLE_ENDIAN);
-				FloatBuffer verticesFloatBuffer = verticesBuffer.asFloatBuffer();
 				
 				ByteBuffer normalsBuffer = ByteBuffer.wrap(data.getNormals().getData());
 				normalsBuffer.order(ByteOrder.LITTLE_ENDIAN);
-				FloatBuffer normalsFloatBuffer = normalsBuffer.asFloatBuffer();
 
-				ByteBuffer materialsBuffer = null;
-				if (data.getColorsQuantized() != null) {
-					byte[] colorData = data.getColorsQuantized().getData();
-					materialsBuffer = ByteBuffer.wrap(colorData);
+				int maxVal = 0;
+				for (int i=0; i<indicesIntBuffer.capacity(); i++) {
+					int index = indicesIntBuffer.get(i);
+					newIndicesBuffer.putInt(index);
+					if (index > maxVal) {
+						maxVal = index;
+					}
 				}
 				
-				if (data.getIndices().getData().length > 4 * maxIndexValues) {
-					int totalNrIndices = indicesIntBuffer.capacity();
-					int nrParts = (totalNrIndices + maxIndexValues - 1) / maxIndexValues;
-					
-					ArrayNode primitivesNode = OBJECT_MAPPER.createArrayNode();
-					
-					for (int part=0; part<nrParts; part++) {
-						startPositionIndices = newIndicesBuffer.position();
-						startPositionVertices = newVerticesBuffer.position();
-						startPositionNormals = newNormalsBuffer.position();
-						startPositionColors = newColorsBuffer.position();
+				int[] min = new int[]{0};
+				int[] max = new int[]{maxVal};
 
-						short indexCounter = 0;
-						int upto = Math.min((part + 1) * maxIndexValues, totalNrIndices);
-						for (int i=part * maxIndexValues; i<upto; i++) {
-							newIndicesBuffer.putShort(indexCounter++);
-						}
-
-						int[] min = new int[]{0};
-						int[] max = new int[]{upto};
-						
-						int nrVertices = upto - part * maxIndexValues;
-						
-						for (int i=part * maxIndexValues; i<upto; i+=3) {
-							int oldIndex1 = indicesIntBuffer.get(i);
-							int oldIndex2 = indicesIntBuffer.get(i+1);
-							int oldIndex3 = indicesIntBuffer.get(i+2);
-							
-							newVerticesBuffer.putFloat(verticesFloatBuffer.get(oldIndex1 * 3));
-							newVerticesBuffer.putFloat(verticesFloatBuffer.get(oldIndex1 * 3 + 1));
-							newVerticesBuffer.putFloat(verticesFloatBuffer.get(oldIndex1 * 3 + 2));
-							newVerticesBuffer.putFloat(verticesFloatBuffer.get(oldIndex2 * 3));
-							newVerticesBuffer.putFloat(verticesFloatBuffer.get(oldIndex2 * 3 + 1));
-							newVerticesBuffer.putFloat(verticesFloatBuffer.get(oldIndex2 * 3 + 2));
-							newVerticesBuffer.putFloat(verticesFloatBuffer.get(oldIndex3 * 3));
-							newVerticesBuffer.putFloat(verticesFloatBuffer.get(oldIndex3 * 3 + 1));
-							newVerticesBuffer.putFloat(verticesFloatBuffer.get(oldIndex3 * 3 + 2));
-						}
-						for (int i=part * maxIndexValues; i<upto; i+=3) {
-							int oldIndex1 = indicesIntBuffer.get(i);
-							int oldIndex2 = indicesIntBuffer.get(i+1);
-							int oldIndex3 = indicesIntBuffer.get(i+2);
-							
-							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex1 * 3));
-							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex1 * 3 + 1));
-							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex1 * 3 + 2));
-							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex2 * 3));
-							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex2 * 3 + 1));
-							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex2 * 3 + 2));
-							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex3 * 3));
-							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex3 * 3 + 1));
-							newNormalsBuffer.putFloat(normalsFloatBuffer.get(oldIndex3 * 3 + 2));
-						}
-						if (materialsBuffer != null) {
-							for (int i=part * maxIndexValues; i<upto; i+=3) {
-								int oldIndex1 = indicesIntBuffer.get(i);
-								int oldIndex2 = indicesIntBuffer.get(i+1);
-								int oldIndex3 = indicesIntBuffer.get(i+2);
-								
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex1) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex1 + 1) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex1 + 2) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex1 + 3) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex2) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex2 + 1) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex2 + 2) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex2 + 3) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex3) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex3 + 1) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex3 + 2) / 255f);
-								newColorsBuffer.putFloat(materialsBuffer.get(oldIndex3 + 3) / 255f);
-							}
-						} else {
-							LOGGER.info("No color");
-						}
-						
-						ObjectNode primitiveNode = OBJECT_MAPPER.createObjectNode();
-						
-						int indicesAccessor = addIndicesAccessor(ifcProduct, indicesBufferView, startPositionIndices, nrVertices / 3, min, max);
-						int verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, nrVertices);
-						int normalsAccessor = addNormalsAccessor(ifcProduct, normalsBufferView, startPositionNormals, nrVertices);
-						int colorAccessor = -1;
-						if (data.getColorsQuantized() != null) {
-							if (colorsBufferView == -1) {
-								colorsBufferView = createBufferView(totalColorsByteLength, totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength, ARRAY_BUFFER, 16);
-							}
-							colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors, 16);
-						}
-						primitivesNode.add(primitiveNode);
-						
-						primitiveNode.put("indices", indicesAccessor);
-						primitiveNode.put("mode", TRIANGLES);
-						ObjectNode attributesNode = OBJECT_MAPPER.createObjectNode();
-						primitiveNode.set("attributes", attributesNode);
-						attributesNode.put("NORMAL", normalsAccessor);
-						attributesNode.put("POSITION", verticesAccessor);
-						if (colorAccessor != -1) {
-//							attributesNode.put("COLOR_0", colorAccessor);
-							primitiveNode.put("material", vertexColorIndex);
-						} else {
-							primitiveNode.put("material", createOrGetMaterial(ifcProduct.eClass().getName(), IfcColors.getDefaultColor(ifcProduct.eClass().getName())));
-						}
-					}
-					
-					int meshId = addMesh(ifcProduct, primitivesNode);
-					int nodeId = addNode(meshId, ifcProduct);
-					translationChildrenNode.add(nodeId);
+				newVerticesBuffer.put(data.getVertices().getData());
+				newNormalsBuffer.put(data.getNormals().getData());
+				if (data.getColorsQuantized() != null) {
+					newColorsBuffer.put(data.getColorsQuantized().getData());
 				} else {
-					int maxVal = 0;
-					for (int i=0; i<indicesIntBuffer.capacity(); i++) {
-						int index = indicesIntBuffer.get(i);
-						if (index > Short.MAX_VALUE) {
-							throw new SerializerException("Index too large to store as short " + index);
-						}
-						newIndicesBuffer.putShort((short)(index));
-						if (index > maxVal) {
-							maxVal = index;
-						}
+					Vector4f color = data.getColor();
+					if (color == null) {
+						color = data.getMostUsedColor();
 					}
-					
-					int[] min = new int[]{0};
-					int[] max = new int[]{maxVal};
-
-					newVerticesBuffer.put(data.getVertices().getData());
-					newNormalsBuffer.put(data.getNormals().getData());
-					if (data.getColorsQuantized() != null) {
-						byte[] colorData = data.getColorsQuantized().getData();
-						for (int i=0; i<colorData.length; i++) {
-							newColorsBuffer.putFloat(UnsignedBytes.toInt(colorData[i]) / 255f);
+					if (color != null) {
+						for (int i=0; i<data.getVertices().getData().length / 12; i++) {
+							newColorsBuffer.put(UnsignedBytes.checkedCast((int)(color.getX() * 255)));
+							newColorsBuffer.put(UnsignedBytes.checkedCast((int)(color.getY() * 255)));
+							newColorsBuffer.put(UnsignedBytes.checkedCast((int)(color.getZ() * 255)));
+							newColorsBuffer.put(UnsignedBytes.checkedCast((int)(color.getW() * 255)));
 						}
 					} else {
-						if (data.getColor() != null) {
-							for (int i=0; i<data.getVertices().getData().length / 12; i++) {
-								newColorsBuffer.putFloat(data.getColor().getX());
-								newColorsBuffer.putFloat(data.getColor().getY());
-								newColorsBuffer.putFloat(data.getColor().getZ());
-								newColorsBuffer.putFloat(data.getColor().getW());
-							}
-						} else {
-							for (int i=0; i<data.getVertices().getData().length / 12; i++) {
-								newColorsBuffer.putFloat(0);
-								newColorsBuffer.putFloat(1);
-								newColorsBuffer.putFloat(0);
-								newColorsBuffer.putFloat(1);
-							}
+						for (int i=0; i<data.getVertices().getData().length / 12; i++) {
+							newColorsBuffer.put(UnsignedBytes.checkedCast(50));
+							newColorsBuffer.put(UnsignedBytes.checkedCast(50));
+							newColorsBuffer.put(UnsignedBytes.checkedCast(50));
+							newColorsBuffer.put(UnsignedBytes.checkedCast(255));
 						}
 					}
-					
-					int totalNrIndices = indicesIntBuffer.capacity();
-					
-					ArrayNode primitivesNode = OBJECT_MAPPER.createArrayNode();
-					
-					ObjectNode primitiveNode = OBJECT_MAPPER.createObjectNode();
-					
-					int indicesAccessor = addIndicesAccessor(ifcProduct, indicesBufferView, startPositionIndices, totalNrIndices, min, max);
-					int verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, data.getVertices().getData().length / 12);
-					int normalsAccessor = addNormalsAccessor(ifcProduct, normalsBufferView, startPositionNormals, data.getNormals().getData().length / 12);
-					int colorAccessor = -1;
-					if (data.getColorsQuantized() != null) {
-						if (colorsBufferView == -1) {
-							colorsBufferView = createBufferView(totalColorsByteLength, totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength, ARRAY_BUFFER, 16);
-						}
-						colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors, data.getVertices().getData().length / 12);
-					}
-					primitivesNode.add(primitiveNode);
-					
-					primitiveNode.put("indices", indicesAccessor);
-					primitiveNode.put("mode", TRIANGLES);
-					ObjectNode attributesNode = OBJECT_MAPPER.createObjectNode();
-					primitiveNode.set("attributes", attributesNode);
-					attributesNode.put("NORMAL", normalsAccessor);
-					attributesNode.put("POSITION", verticesAccessor);
-					if (colorAccessor != -1) {
-						attributesNode.put("COLOR_0", colorAccessor);
-						primitiveNode.put("material", vertexColorIndex);
-					} else {
-						primitiveNode.put("material", createOrGetMaterial(ifcProduct.eClass().getName(), IfcColors.getDefaultColor(ifcProduct.eClass().getName())));
-					}
-					
-					int meshId = addMesh(ifcProduct, primitivesNode);
-					int nodeId = addNode(meshId, ifcProduct);
-					translationChildrenNode.add(nodeId);
 				}
+				
+				int totalNrIndices = indicesIntBuffer.capacity();
+				
+				ArrayNode primitivesNode = OBJECT_MAPPER.createArrayNode();
+				
+				ObjectNode primitiveNode = OBJECT_MAPPER.createObjectNode();
+				
+				int indicesAccessor = addIndicesAccessor(ifcProduct, indicesBufferView, startPositionIndices, totalNrIndices, min, max);
+				int verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, data.getVertices().getData().length / 12);
+				int normalsAccessor = addNormalsAccessor(ifcProduct, normalsBufferView, startPositionNormals, data.getNormals().getData().length / 12);
+				int colorAccessor = -1;
+				if (colorsBufferView == -1) {
+					colorsBufferView = createBufferView(totalColorsByteLength, totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength, ARRAY_BUFFER, 4);
+				}
+				colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors, data.getVertices().getData().length / 12);
+				primitivesNode.add(primitiveNode);
+				
+				primitiveNode.put("indices", indicesAccessor);
+				primitiveNode.put("mode", TRIANGLES);
+				ObjectNode attributesNode = OBJECT_MAPPER.createObjectNode();
+				primitiveNode.set("attributes", attributesNode);
+				attributesNode.put("NORMAL", normalsAccessor);
+				attributesNode.put("POSITION", verticesAccessor);
+				if (colorAccessor != -1) {
+					attributesNode.put("COLOR_0", colorAccessor);
+					primitiveNode.put("material", vertexColorIndex);
+				} else {
+					primitiveNode.put("material", createOrGetMaterial(ifcProduct.eClass().getName(), IfcColors.getDefaultColor(ifcProduct.eClass().getName())));
+				}
+				
+				int meshId = addMesh(ifcProduct, primitivesNode);
+				int nodeId = addNode(meshId, ifcProduct);
+				translationChildrenNode.add(nodeId);
 			}
 		}
 		
@@ -584,10 +444,6 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		return sceneNode;
 	}
 
-//	private int createBufferView(int byteLength, int byteOffset, int byteStride) {
-//		return createBufferView(byteLength, byteOffset, -1, byteStride);
-//	}
-	
 	private int createBufferView(int byteLength, int byteOffset, int target, int byteStride) {
 		ObjectNode bufferViewNode = OBJECT_MAPPER.createObjectNode();
 
@@ -641,7 +497,8 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		accessor.put("bufferView", bufferViewIndex);
 		accessor.put("byteOffset", byteOffset);
 //		accessor.put("byteStride", 16);
-		accessor.put("componentType", FLOAT);
+		accessor.put("componentType", UNSIGNED_BYTE);
+		accessor.put("normalized", true);
 		accessor.put("count", count);
 		accessor.put("type", "VEC4");
 		
@@ -718,7 +575,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		accessor.put("bufferView", bufferViewIndex);
 		accessor.put("byteOffset", offsetBytes);
 //		accessor.put("byteStride", 0);
-		accessor.put("componentType", UNSIGNED_SHORT);
+		accessor.put("componentType", UNSIGNED_INT);
 		accessor.put("count", count);
 		accessor.put("type", "SCALAR");
 		
