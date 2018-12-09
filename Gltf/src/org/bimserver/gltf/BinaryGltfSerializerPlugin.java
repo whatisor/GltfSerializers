@@ -40,7 +40,7 @@ public class BinaryGltfSerializerPlugin extends AbstractSerializerPlugin {
 	private byte[] materialColorVertexShaderBytes;
 
 	@Override
-	public void init(PluginContext pluginContext) throws PluginException {
+	public void init(PluginContext pluginContext, PluginConfiguration systemSettings) throws PluginException {
 		Path vertexColorFragmentShaderPath = pluginContext.getRootPath().resolve("shaders/fragmentcolor.shader");
 		Path vertexColorVertexShaderPath = pluginContext.getRootPath().resolve("shaders/vertexcolor.shader");
 		Path materialColorFragmentShaderPath = pluginContext.getRootPath().resolve("shaders/fragmentmaterial.shader");

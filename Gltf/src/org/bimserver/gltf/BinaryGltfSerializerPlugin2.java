@@ -15,7 +15,7 @@ import org.bimserver.shared.exceptions.PluginException;
 public class BinaryGltfSerializerPlugin2 extends AbstractSerializerPlugin {
 
 	@Override
-	public void init(PluginContext pluginContext) throws PluginException {
+	public void init(PluginContext pluginContext, PluginConfiguration systemSettings) throws PluginException {
 	}
 
 	@Override
