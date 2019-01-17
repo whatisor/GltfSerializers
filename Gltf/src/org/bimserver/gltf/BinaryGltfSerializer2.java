@@ -223,12 +223,12 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 			listProduct.add(ifcProduct);
 			return;
 		}
-		String key = ifcProduct.eClass().getName();
-		if (!typedProductDebug.containsKey(key)) {
-			typedProductDebug.put(key, 0);
-		}
-		typedProductDebug.replace(key,
-				typedProductDebug.get(key) + 1);
+//		String key = ifcProduct.eClass().getName();
+//		if (!typedProductDebug.containsKey(key)) {
+//			typedProductDebug.put(key, 0);
+//		}
+//		typedProductDebug.replace(key,
+//				typedProductDebug.get(key) + 1);
 		
 		GeometryInfo geometryInfo = ifcProduct.getGeometry();
 		if (!ifcProduct.eClass().getName().equals("IfcOpeningElement")
@@ -603,7 +603,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		  for(IfcRelContainedInSpatialStructure containment: spatialStructure.getContainsElements()){
 		    for(IfcProduct product : containment.getRelatedElements()){
 		      // do something with your product, e.g. fire detector
-		    	LOGGER.info("Child "+product.getName());
+		    	//LOGGER.info("Child "+product.getName());
 		    	listProduct.add(product);
 		    }
 		  }
@@ -629,12 +629,12 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		EList<IfcObjectDefinition> childs = getChild((IfcSpatialStructureElement) product);
 		if (childs != null && childs.size() > 0) {
 			for (IfcObjectDefinition child : childs) {
-				ArrayNode subGroup = addGroup(child.getName(), parent);
+				//ArrayNode subGroup = addGroup(child.getName(), parent);
 				String type = child.eClass().getName()+" Group";
 				if (!typedProduct.containsKey(type)) {
-					ArrayNode productGroup = addGroup(type, subGroup);
+					ArrayNode productGroup = addGroup(type, parent);
 					typedProduct.put(type, productGroup);
-					// LOGGER.info("type:"+type);
+					//LOGGER.info("type:"+type);
 				}
 				try {
 					// LOGGER.info("Hidden name:"+((IfcProduct)child).getName());
@@ -644,7 +644,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 					LOGGER.info("getChildRecursive "+e.getMessage());
 				}
 
-				getChildRecursive(child, subGroup, typedProduct);
+				getChildRecursive(child, parent, typedProduct);
 			}
 		} else {
 //			String type = product.eClass().getName()+" Group";
@@ -667,7 +667,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 				if (!typedProduct.containsKey(type)) {
 					ArrayNode productGroup = addGroup(type, parent);
 					typedProduct.put(type, productGroup);
-					// LOGGER.info("type:"+type);
+					LOGGER.info("type:"+type);
 				}
 				try {
 					addGeometry(ifcProduct, typedProduct.get(type));
@@ -754,10 +754,6 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 			if (size > 0) {
 				if (!typedProductFromModel.containsKey(type)) {
 					typedProductFromModel.put(type, 0);
-					if(ifcProduct.eClass().getName().compareTo("IfcRailing")==0)
-					{
-						LOGGER.info("addGeometry----------------IfcRailing");
-					}
 				}
 				typedProductFromModel.replace(type, typedProductFromModel.get(type) + 1);
 			}
