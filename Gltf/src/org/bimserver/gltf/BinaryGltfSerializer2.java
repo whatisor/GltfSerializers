@@ -22,7 +22,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.DoubleBuffer;
-import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -79,8 +78,8 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 	private ObjectNode gltfNode;
 	private ArrayNode nodes;
 	
-	float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
-	float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+	double[] min = {Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE};
+	double[] max = {-Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE};
 	private ArrayNode modelTranslation;
 	private ArrayNode materials;
 	
@@ -192,15 +191,13 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 			if (checkGeometry(ifcProduct, false)) {
 				GeometryInfo geometryInfo = ifcProduct.getGeometry();
 				GeometryData data = geometryInfo.getData();
-				int nrIndicesBytes = data.getIndices().getData().length;
-
-				totalIndicesByteLength += nrIndicesBytes;
-				totalVerticesByteLength += data.getVertices().getData().length;
-				totalNormalsByteLength += data.getNormals().getData().length;
+				totalIndicesByteLength += data.getNrIndices() * 4;
+				totalVerticesByteLength += data.getNrVertices() * 4;
+				totalNormalsByteLength += data.getNrNormals() * 4;
 				if (data.getColorsQuantized() != null) {
 					totalColorsByteLength += data.getColorsQuantized().getData().length;
 				} else {
-					totalColorsByteLength += data.getVertices().getData().length / 3;
+					totalColorsByteLength += (data.getNrVertices() / 3) * 4;
 				}
 			}
 		}
@@ -239,16 +236,16 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 				ByteBuffer matrixByteBuffer = ByteBuffer.wrap(ifcProduct.getGeometry().getTransformation());
 				matrixByteBuffer.order(ByteOrder.LITTLE_ENDIAN);
 				DoubleBuffer doubleBuffer = matrixByteBuffer.asDoubleBuffer();
-				float[] matrix = new float[16];
+				double[] matrix = new double[16];
 				for (int i=0; i<doubleBuffer.capacity(); i++) {
-					matrix[i] = (float) doubleBuffer.get();
+					matrix[i] = doubleBuffer.get();
 				}
 
 				updateExtends(geometryInfo, matrix);
 			}
 		}
 		
-		float[] offsets = getOffsets();
+		double[] offsets = getOffsets();
 		
 		// This will "normalize" the model by moving it's axis-aligned bounding box center to the 0-point. This will always be the wrong position, but at least the building will be close to the 0-point
 		modelTranslation.add(-offsets[0]);
@@ -287,7 +284,9 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 				int[] min = new int[]{0};
 				int[] max = new int[]{maxVal};
 
-				newVerticesBuffer.put(data.getVertices().getData());
+				for (int i=0; i<data.getNrVertices(); i++) {
+					newVerticesBuffer.putFloat((float)verticesBuffer.getDouble());
+				}
 				newNormalsBuffer.put(data.getNormals().getData());
 				if (data.getColorsQuantized() != null) {
 					newColorsBuffer.put(data.getColorsQuantized().getData());
@@ -297,14 +296,14 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 						color = data.getMostUsedColor();
 					}
 					if (color != null) {
-						for (int i=0; i<data.getVertices().getData().length / 12; i++) {
+						for (int i=0; i<data.getNrVertices() / 3; i++) {
 							newColorsBuffer.put(UnsignedBytes.checkedCast((int)(color.getX() * 255)));
 							newColorsBuffer.put(UnsignedBytes.checkedCast((int)(color.getY() * 255)));
 							newColorsBuffer.put(UnsignedBytes.checkedCast((int)(color.getZ() * 255)));
 							newColorsBuffer.put(UnsignedBytes.checkedCast((int)(color.getW() * 255)));
 						}
 					} else {
-						for (int i=0; i<data.getVertices().getData().length / 12; i++) {
+						for (int i=0; i<data.getNrVertices() / 3; i++) {
 							newColorsBuffer.put(UnsignedBytes.checkedCast(50));
 							newColorsBuffer.put(UnsignedBytes.checkedCast(50));
 							newColorsBuffer.put(UnsignedBytes.checkedCast(50));
@@ -320,13 +319,13 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 				ObjectNode primitiveNode = OBJECT_MAPPER.createObjectNode();
 				
 				int indicesAccessor = addIndicesAccessor(ifcProduct, indicesBufferView, startPositionIndices, totalNrIndices, min, max);
-				int verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, data.getVertices().getData().length / 12);
-				int normalsAccessor = addNormalsAccessor(ifcProduct, normalsBufferView, startPositionNormals, data.getNormals().getData().length / 12);
+				int verticesAccessor = addVerticesAccessor(ifcProduct, verticesBufferView, startPositionVertices, data.getNrVertices() / 3);
+				int normalsAccessor = addNormalsAccessor(ifcProduct, normalsBufferView, startPositionNormals, data.getNrNormals() / 3);
 				int colorAccessor = -1;
 				if (colorsBufferView == -1) {
 					colorsBufferView = createBufferView(totalColorsByteLength, totalIndicesByteLength + totalVerticesByteLength + totalNormalsByteLength, ARRAY_BUFFER, 4);
 				}
-				colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors, data.getVertices().getData().length / 12);
+				colorAccessor = addColorsAccessor(ifcProduct, colorsBufferView, startPositionColors, data.getNrVertices() / 3);
 				primitivesNode.add(primitiveNode);
 				
 				primitiveNode.put("indices", indicesAccessor);
@@ -377,27 +376,27 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		addBuffer(body.capacity());
 	}
 
-	private float[] getOffsets() {
-		float[] changes = new float[3];
+	private double[] getOffsets() {
+		double[] changes = new double[3];
 		for (int i=0; i<3; i++) {
 			changes[i] = (max[i] - min[i]) / 2.0f + min[i];
 		}
 		return changes;
 	}
 	
-	private void updateExtends(GeometryInfo geometryInfo, float[] matrix) {
+	private void updateExtends(GeometryInfo geometryInfo, double[] matrix) {
 		if (geometryInfo.getData() == null || geometryInfo.getData().getVertices() == null) {
 			return;
 		}
 		ByteBuffer verticesByteBufferBuffer = ByteBuffer.wrap(geometryInfo.getData().getVertices().getData());
 		verticesByteBufferBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		FloatBuffer floatBuffer = verticesByteBufferBuffer.asFloatBuffer();
-		for (int i=0; i<floatBuffer.capacity(); i+=3) {
-			float[] input = new float[]{floatBuffer.get(i), floatBuffer.get(i + 1), floatBuffer.get(i + 2), 1};
-			float[] output = new float[4];
+		DoubleBuffer doubleBuffer = verticesByteBufferBuffer.asDoubleBuffer();
+		for (int i=0; i<doubleBuffer.capacity(); i+=3) {
+			double[] input = new double[]{doubleBuffer.get(i), doubleBuffer.get(i + 1), doubleBuffer.get(i + 2), 1};
+			double[] output = new double[4];
 			Matrix.multiplyMV(output, 0, matrix, 0, input, 0);
 			for (int j=0; j<3; j++) {
-				float value = output[j];
+				double value = output[j];
 				if (value > max[j]) {
 					max[j] = value;
 				}
@@ -540,11 +539,11 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		accessor.put("type", "VEC3");
 
 		verticesBuffer.order(ByteOrder.LITTLE_ENDIAN);
-		float[] min = { Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE };
-		float[] max = { -Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE };
-		for (int i = 0; i < verticesBuffer.capacity(); i += 12) {
+		double[] min = { Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE };
+		double[] max = { -Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE };
+		for (int i = 0; i < verticesBuffer.capacity(); i += 24) {
 			for (int j = 0; j < 3; j++) {
-				float val = verticesBuffer.getFloat(i + (j * 4));
+				double val = verticesBuffer.getDouble(i + (j * 8));
 				if (val > max[j]) {
 					max[j] = val;
 				}
