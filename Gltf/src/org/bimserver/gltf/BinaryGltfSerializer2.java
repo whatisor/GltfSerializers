@@ -107,7 +107,10 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 	private final Map<String, Integer> createdMaterials = new HashMap<>();
 	private ArrayNode translationChildrenNode;
 	private int vertexColorIndex;
-
+	boolean isTreeOnly = true;
+	public void setLoadMode(boolean isTreeOnly){
+		this.isTreeOnly = isTreeOnly;
+	}
 	public BinaryGltfSerializer2(byte[] vertexColorFragmentShaderBytes,
 			byte[] vertexColorVertexShaderBytes,
 			byte[] materialColorFragmentShaderBytes,
@@ -160,8 +163,13 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 					+ (sceneBytes.length % 4 == 0 ? 0
 							: 4 - sceneBytes.length % 4), 8 + body.capacity()
 					+ (body.capacity() % 4 == 4 ? 0 : 4 - body.capacity() % 4));
+			LOGGER.info("Check buffer size sceneBytes.length"+sceneBytes.length);
+			LOGGER.info("Check buffer size body.capacity() "+body.capacity());
 			writeScene(dataOutputStream, sceneBytes);
-			writeBody(dataOutputStream, body.array());
+			
+			if(!isTreeOnly){
+				writeBody(dataOutputStream, body.array());
+			}
 			dataOutputStream.flush();
 		} catch (IOException e) {
 			throw new SerializerException(e);
