@@ -3,6 +3,7 @@
 	<name>Gltf</name>
 	<comment></comment>
 	<projects>
+		<project>PluginBase</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

@@ -30,6 +30,8 @@ import org.bimserver.plugins.SchemaName;
 import org.bimserver.plugins.serializers.AbstractSerializerPlugin;
 import org.bimserver.plugins.serializers.Serializer;
 import org.bimserver.shared.exceptions.PluginException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class BinaryGltfSerializerPlugin2 extends AbstractSerializerPlugin {
 
@@ -38,13 +40,14 @@ public class BinaryGltfSerializerPlugin2 extends AbstractSerializerPlugin {
 	private byte[] materialColorFragmentShaderBytes;
 	private byte[] materialColorVertexShaderBytes;
 
+	final Logger LOGGER = LoggerFactory.getLogger(BinaryGltfSerializerPlugin2.class);
 	@Override
 	public void init(PluginContext pluginContext) throws PluginException {
 		Path vertexColorFragmentShaderPath = pluginContext.getRootPath().resolve("shaders/fragmentcolor.shader");
 		Path vertexColorVertexShaderPath = pluginContext.getRootPath().resolve("shaders/vertexcolor.shader");
 		Path materialColorFragmentShaderPath = pluginContext.getRootPath().resolve("shaders/fragmentmaterial.shader");
 		Path materialColorVertexShaderPath = pluginContext.getRootPath().resolve("shaders/vertexmaterial.shader");
-		
+		LOGGER.info("GLTFPlugin2 Init");
 		try {
 			vertexColorFragmentShaderBytes = Files.readAllBytes(vertexColorFragmentShaderPath);
 			vertexColorVertexShaderBytes = Files.readAllBytes(vertexColorVertexShaderPath);
@@ -57,31 +60,42 @@ public class BinaryGltfSerializerPlugin2 extends AbstractSerializerPlugin {
 
 	@Override
 	public Serializer createSerializer(PluginConfiguration plugin) {
+		LOGGER.info("GLTFPlugin2 "+new Object(){}.getClass().getEnclosingMethod().getName()+plugin.toString());
+		//LOGGER.info("GLTFPlugin2 testParam "+plugin.getString("testParam"));
 		return new BinaryGltfSerializer2(vertexColorFragmentShaderBytes, vertexColorVertexShaderBytes, materialColorFragmentShaderBytes, materialColorVertexShaderBytes);
 	}
 
 	@Override
 	public Set<Schema> getSupportedSchemas() {
+		LOGGER.info("GLTFPlugin2 "+new Object(){}.getClass().getEnclosingMethod().getName());
 		return Collections.singleton(Schema.IFC2X3TC1);
 	}
 
 	@Override
 	public boolean needsGeometry() {
+		LOGGER.info("GLTFPlugin2 "+new Object(){}.getClass().getEnclosingMethod().getName());
+		
 		return true;
 	}
 
 	@Override
 	public String getDefaultExtension() {
+		LOGGER.info("GLTFPlugin2 "+new Object(){}.getClass().getEnclosingMethod().getName());
+		
 		return "glb";
 	}
 
 	@Override
 	public String getDefaultContentType() {
+		LOGGER.info("GLTFPlugin2 "+new Object(){}.getClass().getEnclosingMethod().getName());
+		
 		return "model/gltf-binary";
 	}
 
 	@Override
 	public String getOutputFormat(Schema schema) {
+		LOGGER.info("GLTFPlugin2 "+new Object(){}.getClass().getEnclosingMethod().getName());
+		
 		return SchemaName.GLTF_BIN_2_0.name();
 	}
 }

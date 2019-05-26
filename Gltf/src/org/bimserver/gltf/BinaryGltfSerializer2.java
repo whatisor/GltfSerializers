@@ -24,7 +24,10 @@ import java.nio.ByteOrder;
 import java.nio.DoubleBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -107,6 +110,13 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 	private final Map<String, Integer> createdMaterials = new HashMap<>();
 	private ArrayNode translationChildrenNode;
 	private int vertexColorIndex;
+	enum ControlMode {
+		  METADATA,
+		  PART,
+		  FULL
+		}
+	private ControlMode controlMode = ControlMode.METADATA;
+	private List<String> partIDs = new ArrayList<String>();
 
 	public BinaryGltfSerializer2(byte[] vertexColorFragmentShaderBytes,
 			byte[] vertexColorVertexShaderBytes,
@@ -121,6 +131,55 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 	@Override
 	protected boolean write(OutputStream outputStream,
 			ProgressReporter progressReporter) throws SerializerException {
+		
+		String systemDir = System.getProperty("java.io.tmpdir");
+		LOGGER.info("System dir "+systemDir);
+		
+		//metadata
+		if(Files.exists(Paths.get(systemDir+"/"+"metadata.gltfOPT"))){
+				controlMode = ControlMode.METADATA;
+				//String content = new String(Files.readAllBytes(Paths.get(systemDir+"/"+"metadata.gltfOPT")));
+				try {
+					Files.delete(Paths.get(systemDir+"/"+"metadata.gltfOPT"));
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+		}
+		else if(Files.exists(Paths.get(systemDir+"/"+"full.gltfOPT"))){
+				controlMode = ControlMode.FULL;				
+				try {
+					Files.delete(Paths.get(systemDir+"/"+"full.gltfOPT"));
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+		}
+		else if(Files.exists(Paths.get(systemDir+"/"+"part.gltfOPT"))){
+			try {
+				controlMode = ControlMode.PART;
+				String content = new String(Files.readAllBytes(Paths.get(systemDir+"/"+"part.gltfOPT")));
+				String[] ids  = content.split(",");
+				partIDs = Arrays.asList(ids);
+				try {
+					Files.delete(Paths.get(systemDir+"/"+"part.gltfOPT"));
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}else {
+
+			controlMode = ControlMode.FULL;
+		}
+		
+		LOGGER.info("Control mode "+ controlMode.toString());
+		
+		
+		
 		gltfNode = OBJECT_MAPPER.createObjectNode();
 
 		buffers = OBJECT_MAPPER.createArrayNode();
