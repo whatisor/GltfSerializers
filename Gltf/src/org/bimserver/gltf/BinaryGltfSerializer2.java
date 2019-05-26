@@ -118,6 +118,10 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 	private ControlMode controlMode = ControlMode.METADATA;
 	private List<String> partIDs = new ArrayList<String>();
 
+	boolean isTreeOnly = true;
+	public void setLoadMode(boolean isTreeOnly){
+		this.isTreeOnly = isTreeOnly;
+	}
 	public BinaryGltfSerializer2(byte[] vertexColorFragmentShaderBytes,
 			byte[] vertexColorVertexShaderBytes,
 			byte[] materialColorFragmentShaderBytes,
@@ -134,10 +138,11 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		
 		String systemDir = System.getProperty("java.io.tmpdir");
 		LOGGER.info("System dir "+systemDir);
-		
+		isTreeOnly = false;
 		//metadata
 		if(Files.exists(Paths.get(systemDir+"/"+"metadata.gltfOPT"))){
 				controlMode = ControlMode.METADATA;
+				isTreeOnly = true;
 				//String content = new String(Files.readAllBytes(Paths.get(systemDir+"/"+"metadata.gltfOPT")));
 				try {
 					Files.delete(Paths.get(systemDir+"/"+"metadata.gltfOPT"));
@@ -219,8 +224,13 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 					+ (sceneBytes.length % 4 == 0 ? 0
 							: 4 - sceneBytes.length % 4), 8 + body.capacity()
 					+ (body.capacity() % 4 == 4 ? 0 : 4 - body.capacity() % 4));
+			LOGGER.info("Check buffer size sceneBytes.length"+sceneBytes.length);
+			LOGGER.info("Check buffer size body.capacity() "+body.capacity());
 			writeScene(dataOutputStream, sceneBytes);
-			writeBody(dataOutputStream, body.array());
+			
+			if(!isTreeOnly){
+				writeBody(dataOutputStream, body.array());
+			}
 			dataOutputStream.flush();
 		} catch (IOException e) {
 			throw new SerializerException(e);
