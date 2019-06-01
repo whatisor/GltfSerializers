@@ -28,7 +28,8 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.HashMap ;
+import java.util.LinkedHashMap ;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -116,8 +117,9 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		  FULL
 		}
 	private ControlMode controlMode = ControlMode.METADATA;
-	private List<String> partIDs = new ArrayList<String>();
-
+	//private List<String> partIDs = new ArrayList<String>();
+	LinkedHashMap <String, Boolean> partIDsMap = new LinkedHashMap <String, Boolean>();
+	String selectedPart = "";
 	boolean isTreeOnly = true;
 	public void setLoadMode(boolean isTreeOnly){
 		this.isTreeOnly = isTreeOnly;
@@ -139,6 +141,8 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		String systemDir = System.getProperty("java.io.tmpdir");
 		LOGGER.info("System dir "+systemDir);
 		isTreeOnly = false;
+		autoUnknown = 1;
+		partIDsMap.clear();
 		//metadata
 		if(Files.exists(Paths.get(systemDir+"/"+"metadata.gltfOPT"))){
 				controlMode = ControlMode.METADATA;
@@ -164,8 +168,17 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 			try {
 				controlMode = ControlMode.PART;
 				String content = new String(Files.readAllBytes(Paths.get(systemDir+"/"+"part.gltfOPT")));
+				System.out.println("part ids "+content);
 				String[] ids  = content.split(",");
-				partIDs = Arrays.asList(ids);
+				//partIDs = Arrays.asList(ids);
+				for(String  id : ids) {
+					partIDsMap.put(id.replace("_", " "),true);
+				}
+				selectedPart = partIDsMap.entrySet().iterator().next().getKey();
+				if(partIDsMap.containsKey("TranslationPivot")||partIDsMap.containsKey("RotationPivot")) {
+
+					controlMode = ControlMode.FULL;
+				}
 				try {
 					Files.delete(Paths.get(systemDir+"/"+"part.gltfOPT"));
 				} catch (IOException e) {
@@ -245,6 +258,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		translationChildrenNode = OBJECT_MAPPER.createArrayNode();
 		translationNode.set("children", translationChildrenNode);
 		translationNode.set("translation", modelTranslation);
+		translationNode.put("name", "TranslationPivot");
 		ObjectNode rotationNode = OBJECT_MAPPER.createObjectNode();
 
 		ArrayNode rotation = OBJECT_MAPPER.createArrayNode();
@@ -255,6 +269,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		rotationChildrenNode.add(nodes.size() - 1);
 		rotationNode.set("children", rotationChildrenNode);
 		rotationNode.set("rotation", rotation);
+		rotationNode.put("name", "RotationPivot");
 
 		float[] quat = normalizeQuaternion(new float[] { 1, 0, 0, -1f });
 
@@ -483,6 +498,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 
 				int meshId = addMesh(ifcProduct, primitivesNode);
 				int nodeId = addNode(meshId, ifcProduct);
+				
 				parentNode.add(nodeId);
 				// LOGGER.info("geometry name :"+ifcProduct.getName());
 			} else {
@@ -690,11 +706,11 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		}
 
 	private void getChildRecursive(IfcObjectDefinition product,
-			ArrayNode parent, HashMap<String, ArrayNode> typedProduct) {
+			ArrayNode parent, HashMap<String, ArrayNode> typedProduct,boolean parentSelected) {
 		if (product == null)
 			return;
 
-		getProduct(product, parent, typedProduct);
+		getProduct(product, parent, typedProduct,parentSelected);
 		EList<IfcObjectDefinition> childs = getChild((IfcSpatialStructureElement) product);
 		if (childs != null && childs.size() > 0) {
 			for (IfcObjectDefinition child : childs) {
@@ -707,13 +723,14 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 				}
 				try {
 					// LOGGER.info("Hidden name:"+((IfcProduct)child).getName());
-					addGeometry((IfcProduct) child, typedProduct.get(type));
+					if(parentSelected || controlMode != ControlMode.PART || partIDsMap.containsKey(type))
+						addGeometry((IfcProduct) child, typedProduct.get(type));
 				} catch (SerializerException e) {
 					// TODO Auto-generated catch block
 					LOGGER.info("getChildRecursive "+e.getMessage());
 				}
 
-				getChildRecursive(child, parent, typedProduct);
+				getChildRecursive(child, parent, typedProduct,parentSelected);
 			}
 		} else {
 //			String type = product.eClass().getName()+" Group";
@@ -728,7 +745,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 	}
 
 	private void getProduct(IfcObjectDefinition product, ArrayNode parent,
-			HashMap<String, ArrayNode> typedProduct) {
+			HashMap<String, ArrayNode> typedProduct, boolean parentSelected) {
 		EList<IfcProduct> ifcProducts = getChildProduct((IfcSpatialStructureElement) product);
 		if (ifcProducts != null) {
 			for (IfcProduct ifcProduct : ifcProducts) {
@@ -739,6 +756,9 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 					LOGGER.info("type:"+type);
 				}
 				try {
+
+					if(!parentSelected && controlMode == ControlMode.PART && !partIDsMap.containsKey(type))
+						continue;
 					addGeometry(ifcProduct, typedProduct.get(type));
 				} catch (SerializerException e) {
 					// TODO Auto-generated catch block
@@ -747,41 +767,61 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 			}
 		}
 	}
-
+	 int autoUnknown = 1;
 	private void buildGeometry() throws SerializerException {
+		//need to reset
+		 autoUnknown = 1;
 		//translationChildrenNode.removeAll();
 		List<IfcSite> sites = model
 				.getAllWithSubTypes(org.bimserver.models.ifc2x3tc1.IfcSite.class);
-
-		
+		boolean isParentSelected = false;
 		for (IfcSite site : sites) {
-			LOGGER.info("sites.getName():" + site.getName());
-			ArrayNode siteChild = addGroup(site.getName(),
+			String name = site.getName();
+			if(name == null)name = "Unknown" + autoUnknown++;
+			if(controlMode == ControlMode.PART && !partIDsMap.containsKey(name))
+				continue;
+			isParentSelected = selectedPart.equals(name);
+			LOGGER.info("sites.getName():" + name);
+			ArrayNode siteChild = addGroup(name,
 					translationChildrenNode);
 			addGeometry((IfcProduct)site, siteChild);
 			// get site geometry
 			
 			HashMap<String, ArrayNode> typedProductSite = new HashMap<>();
-			getProduct(site, siteChild, typedProductSite);
+			getProduct(site, siteChild, typedProductSite,isParentSelected);
 			//traverseSpatialStructure(site);
 			EList<IfcObjectDefinition> buildings = getChild((IfcSpatialStructureElement) site);
 			if (buildings != null) {
 				for (IfcObjectDefinition building : buildings) {
-					LOGGER.info("building.getName():" + building.getName());
+					name = building.getName();
+					if(name == null)name = "Unknown" + autoUnknown++;
 
-					ArrayNode buildingChild = addGroup(building.getName(),
+					LOGGER.info("__building.getName():" + name);
+					if(!isParentSelected && controlMode == ControlMode.PART && !partIDsMap.containsKey(name))
+						continue;
+
+					isParentSelected |= selectedPart.equals(name);;
+					LOGGER.info("building.getName():" + name);
+					ArrayNode buildingChild = addGroup(name,
 							siteChild);
 					EList<IfcObjectDefinition> buildingStoreys = getChild((IfcSpatialStructureElement) building);
 					if (buildingStoreys != null)
 						for (IfcObjectDefinition buildingStorey : buildingStoreys) {
+							name = buildingStorey.getName();
+							if(name == null)name = "Unknown" + autoUnknown++;
+
+							if(!isParentSelected && controlMode == ControlMode.PART && !partIDsMap.containsKey(name))
+								continue;
+
+							isParentSelected |= selectedPart.equals(name);
 							LOGGER.info("buildingStorey.getName():"
-									+ buildingStorey.getName());
+									+ name);
 							ArrayNode buildingStoryChild = addGroup(
-									buildingStorey.getName(), buildingChild);
+									name, buildingChild);
 							HashMap<String, ArrayNode> typedProduct = new HashMap<>();
 							// this. recursive
 							getChildRecursive(buildingStorey,
-									buildingStoryChild, typedProduct);
+									buildingStoryChild, typedProduct,isParentSelected);
 
 						}
 				}
@@ -1007,6 +1047,7 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 		defaultSceneNodes = OBJECT_MAPPER.createArrayNode();
 
 		sceneNode.set("nodes", defaultSceneNodes);
+		sceneNode.put("name", "Scene");
 
 		return sceneNode;
 	}
@@ -1179,8 +1220,10 @@ public class BinaryGltfSerializer2 extends EmfSerializer {
 
 		final ObjectMapper mapper = new ObjectMapper();
 		ObjectNode meshNode = OBJECT_MAPPER.createObjectNode();
+		String name = ifcProduct.getName();
+		if(name == null)name = "Unknown" + autoUnknown++;
 		meshNode.set("name",
-				mapper.convertValue(ifcProduct.getName(), JsonNode.class));
+				mapper.convertValue(name, JsonNode.class));
 		meshNode.set("primitives", primitivesNode);
 		meshes.add(meshNode);
 		return meshes.size() - 1;
