@@ -10,6 +10,8 @@ This is mainly just a demo, but it might evolve into a useful glTF serializer wi
 - https://github.com/KhronosGroup/glTF/blob/master/extensions/Khronos/KHR_binary_glTF/README.md
 - Using vertex-colors where available, otherwise it defaults to a set of predefined type-colors
 
+> Update glTF 2.0 does not use an extension anymore but natively supports embedding all data in one binary file. This is now also implementen as the glTF 2.0 serializer in this plugin.
+
 ## Usage
 - Install this plugin
 - Download .glb files of your models with the "Binary glTF Serializer"

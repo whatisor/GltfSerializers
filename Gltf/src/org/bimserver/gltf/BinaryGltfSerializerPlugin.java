@@ -1,7 +1,7 @@
 package org.bimserver.gltf;
 
 /******************************************************************************
- * Copyright (C) 2009-2018  BIMserver.org
+ * Copyright (C) 2009-2019  BIMserver.org
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.bimserver.emf.Schema;
@@ -39,7 +40,7 @@ public class BinaryGltfSerializerPlugin extends AbstractSerializerPlugin {
 	private byte[] materialColorVertexShaderBytes;
 
 	@Override
-	public void init(PluginContext pluginContext) throws PluginException {
+	public void init(PluginContext pluginContext, PluginConfiguration systemSettings) throws PluginException {
 		Path vertexColorFragmentShaderPath = pluginContext.getRootPath().resolve("shaders/fragmentcolor.shader");
 		Path vertexColorVertexShaderPath = pluginContext.getRootPath().resolve("shaders/vertexcolor.shader");
 		Path materialColorFragmentShaderPath = pluginContext.getRootPath().resolve("shaders/fragmentmaterial.shader");
@@ -66,8 +67,13 @@ public class BinaryGltfSerializerPlugin extends AbstractSerializerPlugin {
 	}
 
 	@Override
-	public boolean needsGeometry() {
-		return true;
+	public Set<String> getRequiredGeometryFields() {
+		Set<String> set = new HashSet<>();
+		set.add("indices");
+		set.add("vertices");
+		set.add("normals");
+		set.add("colorsQuantized");
+		return set;
 	}
 
 	@Override
