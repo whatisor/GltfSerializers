@@ -327,7 +327,7 @@ private void generateSceneAndBody() throws SerializerException {
 				ELEMENT_ARRAY_BUFFER, -1);
 		verticesBufferView = createBufferView(totalVerticesByteLength,
 				totalIndicesByteLength, ARRAY_BUFFER, 12);
-		int normalsBufferView = createBufferView(totalNormalsByteLength, totalIndicesByteLength + totalVerticesByteLength, ARRAY_BUFFER, 12);
+		normalsBufferView = createBufferView(totalNormalsByteLength, totalIndicesByteLength + totalVerticesByteLength, ARRAY_BUFFER, 12);
 		colorsBufferView = -1;
 
 		scenesNode.add(createDefaultScene());
@@ -1115,7 +1115,7 @@ private int calculateBuffer(IfcProduct ifcProduct) {
 		//if (!ifcProduct.eClass().getName().equals("IfcOpeningElement")
 		//		&& geometryInfo != null
 		//		&& geometryInfo.getData().getVertices().length > 0) 
-		if (checkGeometry(ifcProduct, false)) return 0;
+		if (!checkGeometry(ifcProduct, false)) return 0;
 		GeometryInfo geometryInfo = ifcProduct.getGeometry();
 		GeometryData data = geometryInfo.getData();
 		totalIndicesByteLength += data.getNrIndices() * 4;
