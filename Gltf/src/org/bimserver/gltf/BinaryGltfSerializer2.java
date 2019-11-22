@@ -738,53 +738,6 @@ private void writeScene(LittleEndianDataOutputStream dataOutputStream, byte[] sc
 			}
 		}
 	}
-	private void getProductWithElements(IfcObjectDefinition product, ArrayNode parent, HashMap<String, ArrayNode> typedProduct,
-			boolean parentSelected) {
-		EList<IfcProduct> ifcProducts = getChildProduct((IfcSpatialStructureElement) product);
-		if (ifcProducts != null) {
-			for (IfcProduct ifcProduct : ifcProducts) {
-				String type = ifcProduct.eClass().getName() + " Group";
-				if (!typedProduct.containsKey(type)) {
-					ArrayNode productGroup = addGroup(type, parent);
-					typedProduct.put(type, productGroup);
-					LOGGER1.info("type:" + type);
-					ArrayNode buildingElementChild = addGroup(type, productGroup);
-					HashMap<String, ArrayNode> hashElement = new HashMap<>();
-					EList<IfcProduct> childElements = getChildElement(ifcProduct);
-					if (childElements != null && childElements.size() > 0) {
-						for (IfcProduct childElement : childElements) {
-							// ArrayNode subGroup = addGroup(child.getName(), parent);
-							String typeElement = childElement.eClass().getName() + " Group";
-
-							if (!hashElement.containsKey(typeElement)) {
-								ArrayNode productGroup1 = addGroup(typeElement, buildingElementChild);
-								hashElement.put(type, productGroup1);
-								// LOGGER.info("type:"+type);
-							}
-							try {
-								// LOGGER.info("Hidden name:"+((IfcProduct)child).getName());
-								if (parentSelected || controlMode != ControlMode.PART || partIDsMap.containsKey(typeElement))
-									addGeometry(childElement, hashElement.get(typeElement));
-							} catch (SerializerException e) {
-								// TODO Auto-generated catch block
-								LOGGER1.info("getChildRecursive " + e.getMessage());
-							}
-						}
-					}
-				}
-				try {
-					if (!parentSelected && controlMode == ControlMode.PART && !partIDsMap.containsKey(type))
-						continue;
-					addGeometry(ifcProduct, typedProduct.get(type));
-				} catch (SerializerException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-			}
-			
-		}
-
-	}
 	 int autoUnknown = 1;
 	private void buildGeometry() throws SerializerException {
 		//need to reset
