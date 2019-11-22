@@ -741,6 +741,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 
 	private void getProduct(IfcObjectDefinition product, ArrayNode parent, HashMap<String, ArrayNode> typedProduct,
 			boolean parentSelected) {
+
 		if (product instanceof IfcSpatialStructureElement) {
 			EList<IfcProduct> ifcProducts = getChildProduct((IfcSpatialStructureElement) product);
 			if (ifcProducts != null) {
@@ -752,7 +753,6 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 						LOGGER1.info("type:" + type);
 					}
 					try {
-
 						if (!parentSelected && controlMode == ControlMode.PART && !partIDsMap.containsKey(type))
 							continue;
 						addGeometry(ifcProduct, typedProduct.get(type));
@@ -826,6 +826,30 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		}
 	}
 
+//	EList<IfcObjectDefinition> getChild(IfcObjectDefinition building) {
+//		EList<IfcObjectDefinition> allChild = new BasicEList<IfcObjectDefinition>();
+//		if (building instanceof IfcSpatialStructureElement) {
+//			EList<IfcRelDecomposes> listbuilding = ((IfcSpatialStructureElement) building).getIsDecomposedBy();
+//			// LOGGER.info("getIsDecomposedBy().size():"+listbuilding.size());
+//			for (IfcRelDecomposes buildingstoryC : listbuilding) {
+//				// ArrayNode buildingChild = addGroup(building.getName());
+//				EList<IfcObjectDefinition> buildingstoryList = buildingstoryC.getRelatedObjects();
+//				allChild.addAll(buildingstoryList);
+//			}
+//		}
+//
+//		if (building instanceof IfcBuildingElement) {
+//			EList<IfcRelDecomposes> listbuilding = ((IfcBuildingElement) building).getIsDecomposedBy();
+//			// LOGGER.info("getIsDecomposedBy().size():"+listbuilding.size());
+//			for (IfcRelDecomposes buildingstoryC : listbuilding) {
+//				// ArrayNode buildingChild = addGroup(building.getName());
+//				EList<IfcObjectDefinition> buildingstoryList = buildingstoryC.getRelatedObjects();
+//				allChild.addAll(buildingstoryList);
+//			}
+//		}
+//
+//		return allChild;
+//	}
 	EList<IfcObjectDefinition> getChild(IfcSpatialStructureElement group) {
 		EList<IfcObjectDefinition> allChild = new BasicEList<IfcObjectDefinition>();
 		EList<IfcRelDecomposes> listbuilding = group.getIsDecomposedBy();
@@ -835,10 +859,43 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 			EList<IfcObjectDefinition> buildingstoryList = buildingstoryC.getRelatedObjects();
 			allChild.addAll(buildingstoryList);
 		}
+//		if (group instanceof IfcBuildingElement) {
+//			EList<IfcRelDecomposes> listElement = ((IfcBuildingElement) group).getIsDecomposedBy();
+//			for (IfcRelDecomposes element : listElement) {
+//				// ArrayNode buildingChild = addGroup(building.getName());
+//				EList<IfcObjectDefinition> childElements = element.getRelatedObjects();
+//				allChild.addAll((Collection<? extends IfcProduct>) childElements);
+//			}
+//		}
 
 		return allChild;
 	}
 
+//	EList<IfcProduct> getChildProduct(IfcObjectDefinition product2) {
+//		EList<IfcProduct> productAll = new BasicEList<IfcProduct>();
+//		if (product2 instanceof IfcSpatialStructureElement) {
+//			EList<IfcRelContainedInSpatialStructure> productsC = ((IfcSpatialStructureElement) product2)
+//					.getContainsElements();
+//			// /LOGGER.info("productC.size():"+productsC.size());
+//			for (IfcRelContainedInSpatialStructure product : productsC) {
+//				EList<IfcProduct> products = product.getRelatedElements();
+//				for (IfcProduct element : products) {
+//					if (element instanceof IfcBuildingElement) {
+//						EList<IfcRelDecomposes> listElement = ((IfcBuildingElement) element).getIsDecomposedBy();
+//						for (IfcRelDecomposes elementA : listElement) {
+//							// ArrayNode buildingChild = addGroup(building.getName());
+//							EList<IfcObjectDefinition> childElements = elementA.getRelatedObjects();
+//							productAll.addAll((Collection<? extends IfcProduct>) childElements);
+//						}
+////						productAll.addAll((Collection<? extends IfcProduct>) listElement);
+//					}
+//				}
+//				productAll.addAll(products);
+//			}
+//		}
+//
+//		return productAll;
+//	}
 	EList<IfcProduct> getChildElement(IfcProduct group) {
 		EList<IfcProduct> productAll = new BasicEList<IfcProduct>();
 		if (group instanceof IfcBuildingElement) {
@@ -899,13 +956,13 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 			EList<IfcProduct> ifcProducts = getChildProduct((IfcSpatialStructureElement) product);
 			if (ifcProducts != null && ifcProducts.size() > 0) {
 				for (IfcProduct ifcProduct : ifcProducts) {
+					String parentType = ifcProduct.eClass().getName() + " Group";
 					String type = ifcProduct.getName() + " Group";
+					LOGGER.info("type --------------------------: " + type);
 					if (!typedProduct.containsKey(type)) {
-						ArrayNode productGroup = addGroup(type, parent);
+						ArrayNode productGroup = addGroup(type, typedProduct.get(parentType));
 						typedProduct.put(type, productGroup);
 						if (ifcProduct instanceof IfcSpatialStructureElement) {
-//							getChildRecursive(ifcProduct, parent, typedProduct, parentSelected);
-//						} else {
 							EList<IfcObjectDefinition> childs = getChild((IfcSpatialStructureElement) ifcProduct);
 							if (childs != null && childs.size() > 0) {
 								for (IfcObjectDefinition child : childs) {
