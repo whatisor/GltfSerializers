@@ -961,13 +961,13 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 					LOGGER.info("type --------------------------: " + type);
 					if (!typedProduct.containsKey(type)) {
 						ArrayNode productGroup = addGroup(type, typedProduct.get(parentType));
-						typedProduct.put(type, productGroup);
+//						typedProduct.put(type, productGroup);
 						if (ifcProduct instanceof IfcSpatialStructureElement) {
 							EList<IfcObjectDefinition> childs = getChild((IfcSpatialStructureElement) ifcProduct);
 							if (childs != null && childs.size() > 0) {
 								for (IfcObjectDefinition child : childs) {
 									// ArrayNode subGroup = addGroup(child.getName(), parent);
-									String type1 = child.getName() + " Group";
+									String type1 = child.getName();
 									if (!typedProduct.containsKey(type1)) {
 										ArrayNode productGroup1 = addGroup(type1, productGroup);
 										typedProduct.put(type1, productGroup1);
@@ -981,7 +981,6 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 											// TODO Auto-generated catch block
 											LOGGER1.info("getChildRecursive " + e.getMessage());
 										}
-
 									}
 								}
 							}
@@ -991,7 +990,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 								if (elementChilds != null && elementChilds.size() > 0) {
 									for (IfcObjectDefinition element : elementChilds) {
 										// ArrayNode subGroup = addGroup(child.getName(), parent);
-										String type2 = element.getName() + " Group";
+										String type2 = element.getName();
 										if (!typedProduct.containsKey(type2)) {
 											ArrayNode productGroup2 = addGroup(type2, productGroup);
 											typedProduct.put(type2, productGroup2);
