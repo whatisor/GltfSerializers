@@ -126,14 +126,27 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 	private ArrayNode translationChildrenNode;
 	private int vertexColorIndex;
 
+	/**
+	 * ControlMode is set from external web service using file interface(System.getProperty("java.io.tmpdir")) to define parsing mode. 
+	 * METADATA: parser will ignore geometry buffer data, only send back tree information. DEPRECATED because now use BIMSERVER cache data
+	 * PART: Parser will return part of geometry. DEPRECATED because now use BIMSERVER cache data
+	 * FULL: Parser will parse and send full data.  
+	 * @author HuongNguyenXuan
+	 *
+	 */
 	enum ControlMode {
 		METADATA, PART, FULL
 	}
 
+	//Default parse mode
 	private ControlMode controlMode = ControlMode.METADATA;
 	// private List<String> partIDs = new ArrayList<String>();
+	
+	//Store id of part which is selected by PART mode
 	LinkedHashMap<String, Boolean> partIDsMap = new LinkedHashMap<String, Boolean>();
 	String selectedPart = "";
+	
+	//True if in METADATA mode
 	boolean isTreeOnly = true;
 
 	public void setLoadMode(boolean isTreeOnly) {
@@ -149,15 +162,19 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		String systemDir = System.getProperty("java.io.tmpdir");
 		LOGGER1.info("System dir " + systemDir);
 		isTreeOnly = false;
+		
+		//Because many items lacking name, we auto-index for same name "Unknown"
 		autoUnknown = 1;
 		partIDsMap.clear();
-		// metadata
+		// Check if control file exist to define parsing mode.
 		if (Files.exists(Paths.get(systemDir + "/" + "metadata.gltfOPT"))) {
 			controlMode = ControlMode.METADATA;
 			isTreeOnly = true;
 			// String content = new
 			// String(Files.readAllBytes(Paths.get(systemDir+"/"+"metadata.gltfOPT")));
 			try {
+				
+				//clean up mode after using
 				Files.delete(Paths.get(systemDir + "/" + "metadata.gltfOPT"));
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -166,6 +183,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		} else if (Files.exists(Paths.get(systemDir + "/" + "full.gltfOPT"))) {
 			controlMode = ControlMode.FULL;
 			try {
+				//clean up mode after using
 				Files.delete(Paths.get(systemDir + "/" + "full.gltfOPT"));
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -187,6 +205,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 					controlMode = ControlMode.FULL;
 				}
 				try {
+					//clean up mode after using
 					Files.delete(Paths.get(systemDir + "/" + "part.gltfOPT"));
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
@@ -226,6 +245,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		try {
 			LittleEndianDataOutputStream dataOutputStream = new LittleEndianDataOutputStream(outputStream);
 
+			//STEP 1: Main function
 			generateSceneAndBody();
 
 //			StringWriter stringWriter = new StringWriter();
@@ -238,6 +258,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 			writeHeader(dataOutputStream, 12, 8 + sceneLength, 8 + bodyLength);
 			writeScene(dataOutputStream, sceneBytes);
 
+			//If we only need metadata, no need to write geometry buffer to stream
 			if (!isTreeOnly) {
 				writeBody(dataOutputStream, body.array());
 			}
@@ -307,7 +328,11 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 
 		LOGGER1.info("generteSceneAndBody");
 		listProduct.clear();
+		
+		//Go through to calculate buffer only
 		state = 0;
+		
+		//STEP 2: Call 1st in state 0 to calculate buffer.
 		buildGeometry();
 //		List<IfcProduct> test = model.getAllWithSubTypes(IfcProduct.class);
 		List<IfcProduct> products = listProduct;// model.getAllWithSubTypes(IfcProduct.class);
@@ -365,8 +390,9 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		modelTranslation.add(-offsets[1]);
 		modelTranslation.add(-offsets[2]);
 
-		// analysis tree
+		//parse full data
 		state = 1;
+		//Call 2nd: Repeat from STEP 2 to STEP 9 in state 2 to get full data
 		buildGeometry();
 		if (newIndicesBuffer.position() != newIndicesBuffer.capacity()) {
 			throw new SerializerException("Not all space used");
@@ -739,6 +765,13 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		}
 	}
 
+	/**
+	 * Get child product without recursive to cover some special product such as Space
+	 * @param product : root product
+	 * @param parent: Parent of product
+	 * @param typedProduct: Type table of child product
+	 * @param parentSelected: Flag to know selected or not //DEPRECATED
+	 */
 	private void getProduct(IfcObjectDefinition product, ArrayNode parent, HashMap<String, ArrayNode> typedProduct,
 			boolean parentSelected) {
 
@@ -767,16 +800,29 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 
 	int autoUnknown = 1;
 
+	//Main function to parse all product. Product is managed by group and type
+	/**
+	 * There are two mode of running
+	 * 1: state == 0: Only get product list to calculate buffer
+	 * 2: state == 1: Normal mode, parse all tree data.
+	 * @throws SerializerException
+	 */
 	private void buildGeometry() throws SerializerException {
 		// need to reset
 		autoUnknown = 1;
 		// translationChildrenNode.removeAll();
+		//Start parsing from Site type
 		List<IfcSite> sites = model.getAllWithSubTypes(org.bimserver.models.ifc2x3tc1.IfcSite.class);
 		boolean isParentSelected = false;
+		//STEP 3
 		for (IfcSite site : sites) {
 			String name = site.getName();
+			
+			//If product lacking a name, we auto-index with default name "Unknown"
 			if (name == null)
 				name = "Unknown" + autoUnknown++;
+			
+			//If it is metadata mode or not selected part, just ignore
 			if (controlMode == ControlMode.PART && !partIDsMap.containsKey(name))
 				continue;
 			isParentSelected = selectedPart.equals(name);
@@ -788,14 +834,18 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 			HashMap<String, ArrayNode> typedProductSite = new HashMap<>();
 			getProduct(site, siteChild, typedProductSite, isParentSelected);
 			// traverseSpatialStructure(site);
+			
+			//Child of site is Building type. Parse all building
 			EList<IfcObjectDefinition> buildings = getChild(site);
 			if (buildings != null) {
+				//STEP 4
 				for (IfcObjectDefinition building : buildings) {
 					name = building.getName();
 					if (name == null)
 						name = "Unknown" + autoUnknown++;
 
 					LOGGER1.info("__building.getName():" + name);
+					//If parent is selected, all child also is selected
 					if (!isParentSelected && controlMode == ControlMode.PART && !partIDsMap.containsKey(name))
 						continue;
 
@@ -803,8 +853,11 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 					;
 					LOGGER1.info("building.getName():" + name);
 					ArrayNode buildingChild = addGroup(name, siteChild);
+					
+					//Child of building is building storey
 					EList<IfcObjectDefinition> buildingStoreys = getChild((IfcSpatialStructureElement) building);
 					if (buildingStoreys != null)
+						//STEP 5
 						for (IfcObjectDefinition buildingStorey : buildingStoreys) {
 							name = buildingStorey.getName();
 							if (name == null)
@@ -818,6 +871,8 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 							ArrayNode buildingStoryChild = addGroup(name, buildingChild);
 							HashMap<String, ArrayNode> typedProduct = new HashMap<>();
 							// this. recursive
+							//Find all sub product
+							//STEP 6
 							getChildRecursive(buildingStorey, buildingStoryChild, typedProduct, isParentSelected);
 
 						}
@@ -850,6 +905,12 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 //
 //		return allChild;
 //	}
+	
+	/**
+	 * Find all child of IfcSpatialStructureElement with relationship as IsDecomposedBy and getRelatedObjects 
+	 * @param group
+	 * @return
+	 */
 	EList<IfcObjectDefinition> getChild(IfcSpatialStructureElement group) {
 		EList<IfcObjectDefinition> allChild = new BasicEList<IfcObjectDefinition>();
 		EList<IfcRelDecomposes> listbuilding = group.getIsDecomposedBy();
@@ -896,6 +957,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 //
 //		return productAll;
 //	}
+	 /* Find all child of IfcProduct with relationship as IsDecomposedBy and getRelatedObjects */
 	EList<IfcProduct> getChildElement(IfcProduct group) {
 		EList<IfcProduct> productAll = new BasicEList<IfcProduct>();
 		if (group instanceof IfcBuildingElement) {
@@ -910,6 +972,11 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		return productAll;
 	}
 
+	/**
+	 * Find all child of IfcSpatialStructureElement with relationship as getContainsElements and getRelatedElements
+	 * @param group
+	 * @return
+	 */
 	EList<IfcProduct> getChildProduct(IfcSpatialStructureElement group) {
 
 		EList<IfcRelContainedInSpatialStructure> productsC = group.getContainsElements();
@@ -923,8 +990,10 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		return productAll;
 	}
 
+	//Store all product found while parsing tree.
 	List<IfcProduct> listProduct = new ArrayList<IfcProduct>();
 
+	//Deprecated
 	void doSomethingWith(IfcSpatialStructureElement spatialStructure) {
 		for (IfcRelContainedInSpatialStructure containment : spatialStructure.getContainsElements()) {
 			for (IfcProduct product : containment.getRelatedElements()) {
@@ -935,6 +1004,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		}
 	}
 
+	//Deprecated
 	void traverseSpatialStructure(IfcSpatialStructureElement parent) {
 		for (IfcRelDecomposes aggregation : parent.getIsDecomposedBy()) {
 			for (IfcObjectDefinition child : aggregation.getRelatedObjects()) {
@@ -946,6 +1016,13 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		}
 	}
 
+	/**
+	 * Iterative through sub layer to find child with geometry
+	 * @param product: root product
+	 * @param parent: Parent of root product
+	 * @param typedProduct: Classiy product as type to create group later
+	 * @param parentSelected: If parent is selected, child also is selected
+	 */
 	private void getChildRecursive(IfcObjectDefinition product, ArrayNode parent,
 			HashMap<String, ArrayNode> typedProduct, boolean parentSelected) {
 		if (product == null)
@@ -955,16 +1032,20 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		if (product instanceof IfcSpatialStructureElement) {
 			EList<IfcProduct> ifcProducts = getChildProduct((IfcSpatialStructureElement) product);
 			if (ifcProducts != null && ifcProducts.size() > 0) {
+				//STEP 7
 				for (IfcProduct ifcProduct : ifcProducts) {
 					String parentType = ifcProduct.eClass().getName() + " Group";
 					String type = ifcProduct.getName() + " Group";
 					LOGGER.info("type --------------------------: " + type);
+					
+					//If it is fist item of this type, create a new group for this type.
 					if (!typedProduct.containsKey(type)) {
 						ArrayNode productGroup = addGroup(type, typedProduct.get(parentType));
 //						typedProduct.put(type, productGroup);
 						if (ifcProduct instanceof IfcSpatialStructureElement) {
 							EList<IfcObjectDefinition> childs = getChild((IfcSpatialStructureElement) ifcProduct);
 							if (childs != null && childs.size() > 0) {
+								//STEP 8
 								for (IfcObjectDefinition child : childs) {
 									// ArrayNode subGroup = addGroup(child.getName(), parent);
 									String type1 = child.getName();
@@ -976,6 +1057,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 											// LOGGER.info("Hidden name:"+((IfcProduct)child).getName());
 											if (parentSelected || controlMode != ControlMode.PART
 													|| partIDsMap.containsKey(type1))
+												//STEP 9
 												addGeometry((IfcProduct) child, typedProduct.get(type1));
 										} catch (SerializerException e) {
 											// TODO Auto-generated catch block
@@ -988,6 +1070,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 							if (ifcProduct instanceof IfcProduct) {
 								EList<IfcProduct> elementChilds = getChildElement((IfcProduct) ifcProduct);
 								if (elementChilds != null && elementChilds.size() > 0) {
+									//STEP 8.1
 									for (IfcObjectDefinition element : elementChilds) {
 										// ArrayNode subGroup = addGroup(child.getName(), parent);
 										String type2 = element.getName();
@@ -999,6 +1082,7 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 												// LOGGER.info("Hidden name:"+((IfcProduct)child).getName());
 												if (parentSelected || controlMode != ControlMode.PART
 														|| partIDsMap.containsKey(type2))
+													//STEP 9.1
 													addGeometry((IfcProduct) element, typedProduct.get(type2));
 											} catch (SerializerException e) {
 												// TODO Auto-generated catch block
@@ -1009,6 +1093,9 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 								}
 							}
 						}
+						
+						//continue iterative until end of tree
+						//Loop back to STEP 6
 						getChildRecursive(ifcProduct, productGroup, typedProduct, parentSelected);
 					}
 				}
@@ -1018,6 +1105,12 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 
 	}
 
+	/**
+	 * 
+	 * @param name: Name of group, it is type of product
+	 * @param parent: Parent to attach group
+	 * @return
+	 */
 	ArrayNode addGroup(String name, ArrayNode parent) {
 		if (state == 0)
 			return null;
@@ -1034,7 +1127,15 @@ public class BinaryGltfSerializer2 extends BinaryGltfBaseSerializer {
 		return childs;
 	}
 
+	/**
+	 * Parse geometry buffer of product
+	 * @param ifcProduct
+	 * @param parentNode
+	 * @throws SerializerException
+	 */
 	private void addGeometry(IfcProduct ifcProduct, ArrayNode parentNode) throws SerializerException {
+		
+		//If state == 0, it is phase to measure buffer size for allocation, no need to parse details
 		if (state == 0) {
 			listProduct.add(ifcProduct);
 			return;
